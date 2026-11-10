@@ -1,0 +1,47 @@
+name: verify-platforms
+
+# 发布前核对「plugin.json 里声明的平台真的能编出 cdylib」。
+# 只 build + package，不建 Release、不打 tag。
+#
+# 手动触发即可；推 `verify/platforms` 分支也会跑一遍。
+on:
+  workflow_dispatch:
+  push:
+    branches: [verify/platforms]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { plugin: whois, platform: linux-x86_64, os: ubuntu-latest }
+          - { plugin: whois, platform: macos-aarch64, os: macos-15 }
+          - { plugin: musiccard, platform: linux-x86_64, os: ubuntu-latest }
+          - { plugin: musiccard, platform: macos-aarch64, os: macos-15 }
+          - { plugin: epic, platform: linux-x86_64, os: ubuntu-latest }
+          - { plugin: epic, platform: macos-aarch64, os: macos-15 }
+          - { plugin: kfc, platform: linux-x86_64, os: ubuntu-latest }
+          - { plugin: kfc, platform: macos-aarch64, os: macos-15 }
+          - { plugin: ppxfy, platform: linux-x86_64, os: ubuntu-latest }
+          - { plugin: ppxfy, platform: macos-aarch64, os: macos-15 }
+          - { plugin: system, platform: linux-x86_64, os: ubuntu-latest }
+          - { plugin: system, platform: macos-aarch64, os: macos-15 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install OpenSSL headers
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq pkg-config libssl-dev
+      - name: Build
+        run: cargo build --release --locked -p "fuyubot-plugin-${{ matrix.plugin }}"
+      - name: Package
+        run: >-
+          python3 scripts/package.py
+          --plugin "${{ matrix.plugin }}"
+          --platform "${{ matrix.platform }}"
