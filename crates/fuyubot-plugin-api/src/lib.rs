@@ -397,6 +397,32 @@ mod tests {
         ) -> i32 {
             0
         }
+        // ABI v6 追加的入口：测试替身不真的做服务调用 / 配置段写入。
+        unsafe extern "C" fn current_plugin(_h: *mut c_void) -> *const c_char {
+            core::ptr::null()
+        }
+        unsafe extern "C" fn call_service(
+            _h: *mut c_void,
+            _s: *const c_char,
+            _m: *const c_char,
+            _i: *const c_char,
+        ) -> *const c_char {
+            core::ptr::null()
+        }
+        unsafe extern "C" fn last_error(_h: *mut c_void) -> *const c_char {
+            core::ptr::null()
+        }
+        unsafe extern "C" fn list_services(_h: *mut c_void) -> *const c_char {
+            core::ptr::null()
+        }
+        unsafe extern "C" fn set_config_section(
+            _h: *mut c_void,
+            _s: *const c_char,
+            _k: *const c_char,
+            _v: *const c_char,
+        ) -> i32 {
+            -1
+        }
 
         pub fn api() -> HostApi {
             // 每次调都新建一份静态 VTable：地址稳定，插件侧只读。
@@ -430,6 +456,11 @@ mod tests {
                 // 同样只是填坑——测试替身不该真的跑 simplify 操作。
                 simplify_invoke: Some(simplify),
                 simplify_invoke_result: Some(simplify_result),
+                current_plugin: Some(current_plugin),
+                call_service: Some(call_service),
+                last_error: Some(last_error),
+                list_services: Some(list_services),
+                set_config_section: Some(set_config_section),
             }));
             // SAFETY: vtable 是 Box::leak 出来的，地址稳定且布局正确。
             unsafe { HostApi::from_raw(vtable) }.expect("假宿主必须能被解包")

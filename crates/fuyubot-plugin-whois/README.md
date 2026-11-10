@@ -1,6 +1,6 @@
 # Whois 插件
 
-基于 FuyuBot SDK Native ABI v5 的域名 Whois 查询插件。用户发送命令后，插件查询
+基于 FuyuBot SDK Native ABI v6 的域名 Whois 查询插件。用户发送命令后，插件查询
 域名注册信息与服务器 IP 归属，在本地渲染为 PNG 信息卡片，并以照片回复触发消息。
 
 整个运行链路使用 Rust 实现，不依赖 Node、浏览器或外部截图服务。
@@ -98,10 +98,10 @@ cargo build --release --locked -p fuyubot-plugin-whois
 
 ```powershell
 cargo build --release --locked -p fuyubot-plugin-whois
-python scripts\package.py --plugin whois --platform windows-x86_64 --version 0.1.0
+python scripts\package.py --plugin whois --platform windows-x86_64 --version 0.1.1
 ```
 
-产物位于 `dist/whois-0.1.0-windows-x86_64.zip`。
+产物位于 `dist/whois-0.1.1-windows-x86_64.zip`。
 
 Linux / macOS / Android 只切 `--platform`，脚本会按目标平台选库文件名并改写包内
 `entry`。Android 需要额外装 target、NDK 和 `cargo-ndk`：
@@ -110,8 +110,8 @@ Linux / macOS / Android 只切 `--platform`，脚本会按目标平台选库文�
 rustup target add aarch64-linux-android x86_64-linux-android
 cargo install cargo-ndk --locked
 cargo ndk -t arm64-v8a -t x86_64 --platform 24 build --release --locked -p fuyubot-plugin-whois
-python scripts\package.py --plugin whois --platform android-aarch64 --version 0.1.0
-python scripts\package.py --plugin whois --platform android-x86_64 --version 0.1.0
+python scripts\package.py --plugin whois --platform android-aarch64 --version 0.1.1
+python scripts\package.py --plugin whois --platform android-x86_64 --version 0.1.1
 ```
 
 打包脚本会校验 `plugin.json` 的 `schema` / `id` / `kind` / `abi`，并核对命令行版本与
@@ -124,8 +124,8 @@ python scripts\package.py --plugin whois --platform android-x86_64 --version 0.1
 - 手动触发（Actions → release → Run workflow）：只产出各平台 artifact，不建 Release。
 
 ```powershell
-git tag whois-v0.1.0
-git push origin whois-v0.1.0
+git tag whois-v0.1.1
+git push origin whois-v0.1.1
 ```
 
 从 Actions 页面下载的 artifact 外层会被 GitHub 再包一层 ZIP，真正用于安装的是其中的

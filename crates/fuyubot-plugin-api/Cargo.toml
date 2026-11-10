@@ -2,17 +2,17 @@
 #
 # 为什么 vendored：
 # - crates.io 上 `fuyubot-plugin-api` 的 0.1.x 已全部 yank，新解析拿不到；
-# - 0.1.3 已弃用，且 `fuyubot-abi` 0.1.3 把 ABI 升到 v6，当前宿主仍是 ABI v5。
+# - 上游 0.1.3 已弃用，但门面里的 `HostExt` / `Subscription` 等便利层还在被插件使用。
 #
-# 所以这里照抄 0.1.2 的源码（上游 MIT OR Apache-2.0），只保留门面本身；
-# 下面的 `fuyubot-abi` 严格锁 =0.1.2，保证插件声明与宿主一致的 ABI v5。
-# 上游恢复发布 / 宿主升到 ABI v6 后，删掉这个 crate、改回 registry 依赖即可。
+# 这里照抄 0.1.2 的门面源码（上游 MIT OR Apache-2.0），只保留门面本身；
+# 下面的 `fuyubot-abi` 升到 =0.1.3，即 ABI v6，与当前 FuyuBot 宿主一致。
+# 上游若恢复门面发布，删掉这个 crate、改回 registry 依赖即可。
 [package]
 name = "fuyubot-plugin-api"
 version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
-description = "插件作者门面：fuyubot-abi 的安全包装与版本协商（vendored，ABI v5）"
+description = "插件作者门面：fuyubot-abi 的安全包装与版本协商（vendored，ABI v6）"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/CatMoeCircle/FuyuBot-Script"
 # 不是我们的 crate 名，禁止误发布。

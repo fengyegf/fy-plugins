@@ -5,7 +5,7 @@
 # - `rlib`：可被其他 Rust 代码依赖 / 被 `cargo test`、`examples/` 使用的库。
 [package]
 name = "fuyubot-plugin-system"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 rust-version.workspace = true
 description = "查看宿主机系统信息与机器人状态，渲染成信息卡片并以照片回复"

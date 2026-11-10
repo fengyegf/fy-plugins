@@ -79,7 +79,7 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
 | `src/render/` | hyper-render 卡片：HTML 模板、背景/头像合成、JPEG 输出 |
 | `examples/` | 离线样张出图，调样式与验收用 |
 | `testdata/` | 离线回放用最小配置与 `/system` 更新样例 |
-| `plugin.json` | 插件元信息（native / ABI 5） |
+| `plugin.json` | 插件元信息（native / ABI 6） |
 
 分层原则：`host` 只谈宿主通信，`cmd` 只谈命令，`core` 只谈数据与网络，
 `render` 只谈版面；任一层都可以单独 `cargo test`。

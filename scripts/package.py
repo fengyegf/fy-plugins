@@ -94,8 +94,9 @@ def load_plugin(plugin: str) -> tuple[Path, dict, str, str]:
         raise SystemExit("plugin.json 的 schema 必须是 1")
     if manifest.get("id") != plugin:
         raise SystemExit(f"plugin.json 的 id 与 --plugin 不一致：{manifest.get('id')!r}")
-    if manifest.get("kind") != "native" or manifest.get("abi") != 5:
-        raise SystemExit("plugin.json 必须声明 native kind 和 ABI 5")
+    # 当前宿主支持 ABI v5（旧）/ v6（新），bundle 按插件自己声明的版本打。
+    if manifest.get("kind") != "native" or manifest.get("abi") not in (5, 6):
+        raise SystemExit("plugin.json 必须声明 native kind 和 ABI 5 或 6")
     return crate, manifest, version, library_name
 
 

@@ -2,10 +2,10 @@
   "schema": 1,
   "id": "system",
   "name": "System",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "kind": "native",
   "entry": "system.dll",
-  "abi": 5,
+  "abi": 6,
   "platforms": [
     "windows-x86_64",
     "linux-x86_64",

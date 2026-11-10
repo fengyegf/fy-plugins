@@ -1,6 +1,6 @@
 //! whois：域名 Whois 信息查询卡片插件。
 //!
-//! 插件基于 FuyuBot SDK Native ABI v5，完整查询、渲染与消息发送链路均在 Rust
+//! 插件基于 FuyuBot SDK Native ABI v6，完整查询、渲染与消息发送链路均在 Rust
 //! 进程内完成。图像由 `hyper-render` 的 Blitz + Vello 管线生成。
 //!
 //! 分层：

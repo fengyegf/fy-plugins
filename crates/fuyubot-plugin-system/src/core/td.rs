@@ -524,6 +524,32 @@ mod tests {
         ) -> *const c_char {
             core::ptr::null()
         }
+        // ABI v6 追加的入口：测试替身不真的做服务调用 / 配置段写入。
+        unsafe extern "C" fn current_plugin(_host: *mut c_void) -> *const c_char {
+            core::ptr::null()
+        }
+        unsafe extern "C" fn call_service(
+            _host: *mut c_void,
+            _service: *const c_char,
+            _method: *const c_char,
+            _input: *const c_char,
+        ) -> *const c_char {
+            core::ptr::null()
+        }
+        unsafe extern "C" fn last_error(_host: *mut c_void) -> *const c_char {
+            core::ptr::null()
+        }
+        unsafe extern "C" fn list_services(_host: *mut c_void) -> *const c_char {
+            core::ptr::null()
+        }
+        unsafe extern "C" fn set_config_section(
+            _host: *mut c_void,
+            _section: *const c_char,
+            _key: *const c_char,
+            _value: *const c_char,
+        ) -> i32 {
+            -1
+        }
 
         pub fn api() -> HostApi {
             let vtable: &'static HostApiVTable = Box::leak(Box::new(HostApiVTable {
@@ -552,6 +578,11 @@ mod tests {
                 provide_service_shared: Some(provide_service_shared),
                 simplify_invoke: Some(simplify_invoke),
                 simplify_invoke_result: Some(simplify_invoke_result),
+                current_plugin: Some(current_plugin),
+                call_service: Some(call_service),
+                last_error: Some(last_error),
+                list_services: Some(list_services),
+                set_config_section: Some(set_config_section),
             }));
             // SAFETY: vtable 是 Box::leak 出来的，地址稳定、布局正确。
             unsafe { HostApi::from_raw(vtable) }.expect("假宿主应当能解包")

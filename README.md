@@ -13,12 +13,12 @@
 
 | id | crate | 版本 | 平台 | 入口 |
 | --- | --- | --- | --- | --- |
-| `whois` | `crates/fuyubot-plugin-whois` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
-| `musiccard` | `crates/fuyubot-plugin-musiccard` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bin/musiccard.dll` |
-| `epic` | `crates/fuyubot-plugin-epic` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `epic.dll` |
-| `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
-| `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.0 | Windows / Linux / macOS（**不含 Android**） | `ppxfy.dll` |
-| `system` | `crates/fuyubot-plugin-system` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
+| `whois` | `crates/fuyubot-plugin-whois` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
+| `musiccard` | `crates/fuyubot-plugin-musiccard` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bin/musiccard.dll` |
+| `epic` | `crates/fuyubot-plugin-epic` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `epic.dll` |
+| `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
+| `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.1 | Windows / Linux / macOS（**不含 Android**） | `ppxfy.dll` |
+| `system` | `crates/fuyubot-plugin-system` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
 
 平台列表的唯一来源是各 crate 的 `plugin.json`；发布流水线按它生成构建矩阵。
 
@@ -35,8 +35,9 @@
 | `android-aarch64` / `android-x86_64` | 本机 NDK 27.2 + `cargo ndk` + `package.py`（whois / musiccard / epic / kfc / system） | 10/10 通过 |
 
 验证记录：<https://github.com/fengyegf/fy-plugins/actions/runs/42824916393>。
-其中只有 Windows 产物跑过宿主的 `fuyubot-sdk check`（ABI 5）；Linux / macOS / Android
-只证明能编译链接、能按契约打包，运行行为仍需真机确认。
+上面的验证是 ABI v5 时期跑的；迁到 ABI v6 后，只有构建/打包结论仍然成立，宿主加载
+需要新版（ABI v6）的 `fuyubot-sdk` / FuyuBot 才能验证——本机附带的
+`fuyubot-sdk.exe` 还是 ABI v5，不能再用来 check ABI v6 插件。
 
 **能打包的**：`plugin.json` 里声明、并且已经构建出动态库的平台组合。
 
@@ -59,7 +60,7 @@ Android 的两端仍按发布流水线（tag）构建。
 
 ```text
 crates/
-  fuyubot-plugin-api/        # vendored 宿主门面（ABI v5），不是插件
+  fuyubot-plugin-api/        # vendored 宿主门面（ABI v6），不是插件
   fuyubot-plugin-<id>/       # 一个插件一个 crate
     Cargo.toml               # 版本 / 依赖 / [lib] name 都独立
     plugin.json              # 商城 bundle 元信息（id / entry / abi / platforms）
@@ -133,14 +134,14 @@ bundle 契约（与商城一致）：
 repo: fengyegf/fy-plugins
 homepage: https://github.com/fengyegf/fy-plugins
 versions:
-  - version: 0.1.0
-    tag: whois-v0.1.0                    # 一个仓库多个插件，tag 必须带 id 前缀
+  - version: 0.1.1
+    tag: whois-v0.1.1                    # 一个仓库多个插件，tag 必须带 id 前缀
     assets:
-      windows-x86_64: whois-0.1.0-windows-x86_64.zip
-      linux-x86_64: whois-0.1.0-linux-x86_64.zip
-      macos-aarch64: whois-0.1.0-macos-aarch64.zip
-      android-aarch64: whois-0.1.0-android-aarch64.zip
-      android-x86_64: whois-0.1.0-android-x86_64.zip
+      windows-x86_64: whois-0.1.1-windows-x86_64.zip
+      linux-x86_64: whois-0.1.1-linux-x86_64.zip
+      macos-aarch64: whois-0.1.1-macos-aarch64.zip
+      android-aarch64: whois-0.1.1-android-aarch64.zip
+      android-x86_64: whois-0.1.1-android-x86_64.zip
 ```
 
 资产 URL 由 `repo` + `tag` + 文件名拼出来，所以 tag 必须用 `<id>-v<version>`；
@@ -158,13 +159,14 @@ versions:
 
 ## 为什么 vendored `fuyubot-plugin-api`
 
-`crates/fuyubot-plugin-api` 是上游 0.1.2 源码的本地副本：
+`crates/fuyubot-plugin-api` 是上游 0.1.2 门面源码的本地副本：
 
 - crates.io 上 `fuyubot-plugin-api` 的 0.1.x 已全部 yank，新仓库没法重新解析；
-- 上游 0.1.3 已弃用，而 `fuyubot-abi` 0.1.3 把 ABI 升到 v6，当前宿主只认 v5。
+- 上游 0.1.3 已弃用，只剩一行弃用说明，但门面里的 `HostExt` / `Subscription` 还在用；
+- 底层 ABI 依赖是 `fuyubot-abi = "=0.1.3"`，即 **ABI v6**，与当前 FuyuBot 宿主一致。
 
-所以 `fuyubot-abi` 严格锁 `=0.1.2`，门面源码随仓维护。宿主升级到 ABI v6 后，
-删掉这个 crate、改回 registry 依赖即可，插件源码不用动。
+所以门面源码随仓维护，ABI 版本由 `fuyubot-abi` 决定。上游若恢复门面发布，删掉这个
+crate、改回 registry 依赖即可，插件源码不用动。
 
 ## 依赖与锁文件
 

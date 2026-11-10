@@ -99,10 +99,10 @@ cargo build --release -p fuyubot-plugin-musiccard
 商城使用按平台打包的 ZIP。Windows x86_64 本地打包（在仓库根目录执行）：
 
 ```powershell
-python scripts\package.py --plugin musiccard --platform windows-x86_64 --version 0.1.0
+python scripts\package.py --plugin musiccard --platform windows-x86_64 --version 0.1.1
 ```
 
-产物位于 `dist/musiccard-0.1.0-windows-x86_64.zip`。
+产物位于 `dist/musiccard-0.1.1-windows-x86_64.zip`。
 
 ZIP 根目录直接包含 `plugin.json` 与 `bin/musiccard.dll`，不套目录；Linux、macOS 和
 Android 用同一个脚本，只切 `--platform`，包内入口会按平台改成
@@ -114,8 +114,8 @@ Android 需要 Rust Android targets、Android NDK 和 `cargo-ndk`：
 rustup target add aarch64-linux-android x86_64-linux-android
 cargo install cargo-ndk --locked
 cargo ndk -t arm64-v8a -t x86_64 --platform 24 build --release -p fuyubot-plugin-musiccard
-python scripts\package.py --plugin musiccard --platform android-aarch64 --version 0.1.0
-python scripts\package.py --plugin musiccard --platform android-x86_64 --version 0.1.0
+python scripts\package.py --plugin musiccard --platform android-aarch64 --version 0.1.1
+python scripts\package.py --plugin musiccard --platform android-x86_64 --version 0.1.1
 ```
 
 GitHub Actions 页面下载到的 artifact 外层会被再包一层 ZIP；真正用于安装的是其中的
@@ -125,8 +125,8 @@ GitHub Actions 页面下载到的 artifact 外层会被再包一层 ZIP；真正
 Release：
 
 ```powershell
-git tag musiccard-v0.1.0
-git push origin musiccard-v0.1.0
+git tag musiccard-v0.1.1
+git push origin musiccard-v0.1.1
 ```
 
 商城收录仍由 `FuyuBot-plugins` 仓库的 `plugins/musiccard.yml` 指向本仓库的 Release
