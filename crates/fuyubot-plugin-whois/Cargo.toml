@@ -6,7 +6,7 @@
 # 两者共用同一份源码，宿主只认 `plugin_*` 导出符号，不受 rlib 影响。
 [package]
 name = "fuyubot-plugin-whois"
-version = "0.1.1"
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 description = "查询域名 Whois 信息，渲染成信息卡片并以照片回复"

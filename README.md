@@ -13,7 +13,7 @@
 
 | id | crate | 版本 | 平台 | 入口 |
 | --- | --- | --- | --- | --- |
-| `whois` | `crates/fuyubot-plugin-whois` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
+| `whois` | `crates/fuyubot-plugin-whois` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
 | `musiccard` | `crates/fuyubot-plugin-musiccard` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bin/musiccard.dll` |
 | `epic` | `crates/fuyubot-plugin-epic` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `epic.dll` |
 | `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
@@ -133,14 +133,14 @@ bundle 契约（与商城一致）：
 repo: fengyegf/fy-plugins
 homepage: https://github.com/fengyegf/fy-plugins
 versions:
-  - version: 0.1.1
-    tag: whois-v0.1.1                    # 一个仓库多个插件，tag 必须带 id 前缀
+  - version: 0.1.0
+    tag: whois-v0.1.0                    # 一个仓库多个插件，tag 必须带 id 前缀
     assets:
-      windows-x86_64: whois-0.1.1-windows-x86_64.zip
-      linux-x86_64: whois-0.1.1-linux-x86_64.zip
-      macos-aarch64: whois-0.1.1-macos-aarch64.zip
-      android-aarch64: whois-0.1.1-android-aarch64.zip
-      android-x86_64: whois-0.1.1-android-x86_64.zip
+      windows-x86_64: whois-0.1.0-windows-x86_64.zip
+      linux-x86_64: whois-0.1.0-linux-x86_64.zip
+      macos-aarch64: whois-0.1.0-macos-aarch64.zip
+      android-aarch64: whois-0.1.0-android-aarch64.zip
+      android-x86_64: whois-0.1.0-android-x86_64.zip
 ```
 
 资产 URL 由 `repo` + `tag` + 文件名拼出来，所以 tag 必须用 `<id>-v<version>`；

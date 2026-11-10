@@ -1204,7 +1204,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-whois"
-version = "0.1.1"
+version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "fuyubot-plugin-api",
