@@ -1,0 +1,25 @@
+# epic：Epic 免费游戏卡片插件。
+#
+# 本 crate 同时产出两种库目标：
+# - `cdylib`：宿主 dlopen 的插件动态库（`epic.dll` / `libepic.so`）；
+# - `rlib`：可被其他 Rust 代码依赖 / 被 `cargo test`、`examples/` 使用的库。
+[package]
+name = "fuyubot-plugin-epic"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "生成 Epic 免费游戏卡片并以照片回复消息"
+
+[lib]
+# 动态库文件名跟着 lib name 走：保持 `epic.dll`，plugin.json 的 entry 不用改。
+name = "epic"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fuyubot-plugin-api.workspace = true
+hyper-render.workspace = true
+# 封面解码 / 合成：Epic CDN 上是 jpg，偶尔 webp。
+image = { workspace = true, features = ["jpeg", "png", "webp"] }
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true

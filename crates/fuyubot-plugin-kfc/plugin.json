@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "kfc",
+  "name": "KFC",
+  "version": "0.1.0",
+  "kind": "native",
+  "entry": "kfc.dll",
+  "abi": 5,
+  "platforms": [
+    "windows-x86_64",
+    "linux-x86_64",
+    "macos-aarch64"
+  ],
+  "description": "抓一句肯德基疯话，渲染成推特卡片发回去。"
+}

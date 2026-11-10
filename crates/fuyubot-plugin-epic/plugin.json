@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "epic",
+  "name": "Epic",
+  "version": "0.1.0",
+  "kind": "native",
+  "entry": "epic.dll",
+  "abi": 5,
+  "platforms": [
+    "windows-x86_64",
+    "linux-x86_64",
+    "macos-aarch64"
+  ],
+  "description": "生成 Epic 免费游戏卡片并以照片回复消息。"
+}

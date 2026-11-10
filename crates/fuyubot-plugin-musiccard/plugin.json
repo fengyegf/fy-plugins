@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "musiccard",
+  "name": "MusicCard",
+  "version": "0.1.0",
+  "kind": "native",
+  "entry": "bin/musiccard.dll",
+  "abi": 5,
+  "platforms": [
+    "windows-x86_64",
+    "linux-x86_64",
+    "macos-aarch64",
+    "android-aarch64",
+    "android-x86_64"
+  ],
+  "description": "生成网易云音乐卡片，并以照片回复命令消息。"
+}

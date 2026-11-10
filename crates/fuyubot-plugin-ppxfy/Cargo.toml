@@ -1,0 +1,44 @@
+# ppxfy：DMM / DLSite 下载与解压插件。
+#
+# 本 crate 同时产出两种库目标：
+# - `cdylib`：宿主 dlopen 的插件动态库（`ppxfy.dll` / `libppxfy.so`）；
+# - `rlib`：可被其他 Rust 代码依赖 / 被 `cargo test`、`examples/` 使用的库。
+#
+# zip 的本地补丁在 workspace 根 `[patch.crates-io]`，见根 Cargo.toml。
+[package]
+name = "fuyubot-plugin-ppxfy"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "从 DMM / DLSite 下载并解压作品，附带记录与 Telegraph 上传"
+
+[lib]
+# 动态库文件名跟着 lib name 走：保持 `ppxfy.dll`，plugin.json 的 entry 不用改。
+name = "ppxfy"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# hatchzip-core 的错误类型是 anyhow::Error，这里要接住并归类。
+anyhow = "1"
+# 乱码文件名修复：需要 Shift-JIS / GBK 解码器。
+encoding_rs = "0.8"
+fuyubot-plugin-api.workspace = true
+# 就地解压：解压多少就释放多少压缩包空间，磁盘峰值只需要输出大小。
+# 0.1.8 是代码写定时验证过的版本；0.1.10 改了 `finish_orphaned` 的签名与
+# `Outcome::Finished` 的形状，锁死在这里，升级时一起改调用点。
+hatchzip-core = "=0.1.8"
+# DMM / DLSite 页面解析：使用 CSS 选择器。
+scraper = "0.29"
+# 数据库记录：字段名与既有数据格式兼容，靠 derive 减少键名映射样板。
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true
+sha2 = "0.10"
+# Telegraph 页面：telegraph-rs 是 async 的（reqwest），这里只在业务线程里 block_on。
+telegraph-rs = "0.8.0-rc1"
+thiserror.workspace = true
+# telegraph-rs 的 reqwest 需要 reactor / timer 驱动。
+tokio = { version = "1", features = ["rt", "time", "net"] }
+# 阻塞式 HTTP，无需 async runtime：下载线程本来就是独占的。
+ureq.workspace = true
+# DMM 年龄确认页要拼 `rurl=`，以及判断链接属于哪个站点。
+url = "2"

@@ -1,0 +1,33 @@
+# Rust 构建产物
+/target/
+**/*.rs.bk
+
+# 本地打包产物
+/dist/
+*.zip
+
+# 插件动态库（由 cargo 构建，不入库）
+*.dll
+*.so
+*.dylib
+*.lib
+*.exp
+*.pdb
+*.ilk
+
+# 本地环境与凭据
+.env
+.env.*
+!.env.example
+*.local.toml
+
+# 本地渲染 / 验收产物
+*.render.png
+*.tmp
+*.log
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

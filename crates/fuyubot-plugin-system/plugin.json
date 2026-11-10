@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "system",
+  "name": "System",
+  "version": "0.1.0",
+  "kind": "native",
+  "entry": "system.dll",
+  "abi": 5,
+  "platforms": [
+    "windows-x86_64",
+    "linux-x86_64",
+    "macos-aarch64"
+  ],
+  "description": "查看宿主机系统信息与机器人状态，渲染成信息卡片并以照片回复。"
+}

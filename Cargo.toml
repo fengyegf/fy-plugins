@@ -1,0 +1,50 @@
+# FuyuBot 插件源码总仓（Rust）
+#
+# 一个 workspace，多个**可以单独发布**的插件 crate：
+#
+# - 每个 crate 是一个独立的库目标（`rlib`）+ 插件动态库（`cdylib`）；
+# - 版本、描述、依赖各自独立，互不牵连；
+# - 发布时按插件单独打 tag（如 `whois-v0.1.2`），只构建该插件声明的平台，
+#   产物是插件商城契约要求的 `<id>-<version>-<platform>.zip`。
+#
+# 新增插件：复制 `crates/fuyubot-plugin-whois` 为模板，改 Cargo.toml 的
+# name / version 和 `[lib] name`，再补 `plugin.json` 即可被 `scripts/package.py` 识别。
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+# 本地补丁的第三方 crate 不是 workspace 成员，只是被 `[patch]` 引用。
+exclude = ["vendor/zip"]
+
+[workspace.package]
+edition = "2024"
+# 与宿主 SDK 对齐；ppxfy 自身最低 1.93，这里取整体要求更高的版本。
+rust-version = "1.99"
+
+[workspace.dependencies]
+# 宿主门面：本地 vendored 副本（上游 0.1.x 已在 crates.io yank，且 0.1.3 起
+# ABI 升到 v6；当前宿主仍是 ABI v5，所以这里锁在 0.1.2 的源码上）。
+fuyubot-plugin-api = { path = "crates/fuyubot-plugin-api", version = "0.1.2" }
+# 门面之下真正的 ABI crate：0.1.2 = ABI v5，必须是 crates.io 上未 yank 的这一版。
+fuyubot-abi = "=0.1.2"
+# 纯 Rust 的 HTML → PNG 渲染（Blitz + Vello），插件只需要 png 特性。
+hyper-render = { version = "=0.2.2", default-features = false, features = ["png"] }
+# 位图解码 / 合成。各插件按需打开 jpeg / png / ico / gif / webp 特性。
+image = { version = "=0.25.6", default-features = false }
+serde_json = "1"
+thiserror = "2"
+# 阻塞式 HTTP：命令在自己的业务线程里跑，不需要 async runtime。
+ureq = "2"
+
+# zip 9.1.3 在 Windows 的「DOS 保留名」校验里直接 `split_at(3)`，
+# 条目名第 3 个字节不是字符边界时（日文文件名必中）会 panic 整个解压线程。
+# 上游最新版仍是 9.1.3，只能本地打补丁：`vendor/zip/src/path.rs` 改成了 `get(..3)`。
+[patch.crates-io]
+zip = { path = "vendor/zip" }
+
+# 插件是热加载的动态库，体积和加载速度都值得压一压。
+# 所有 crate 共用同一套 release profile。
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

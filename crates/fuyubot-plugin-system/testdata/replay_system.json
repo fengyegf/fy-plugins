@@ -1,0 +1,14 @@
+{
+  "@type": "updateNewMessage",
+  "message": {
+    "id": 9001,
+    "chat_id": 1000000001,
+    "date": 1793816468,
+    "is_outgoing": false,
+    "sender_id": { "@type": "messageSenderUser", "user_id": 8007980715 },
+    "content": {
+      "@type": "messageText",
+      "text": { "@type": "formattedText", "text": "/system" }
+    }
+  }
+}

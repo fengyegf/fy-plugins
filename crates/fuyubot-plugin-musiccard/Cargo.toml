@@ -1,0 +1,33 @@
+# musiccard：生成网易云音乐卡片的插件。
+#
+# 本 crate 同时产出两种库目标：
+# - `cdylib`：宿主 dlopen 的插件动态库（`musiccard.dll` / `libmusiccard.so`）；
+# - `rlib`：可被其他 Rust 代码依赖 / 被 `cargo test`、`examples/` 使用的库。
+[package]
+name = "fuyubot-plugin-musiccard"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "生成网易云音乐卡片的 FuyuBot 插件"
+
+[lib]
+# 动态库文件名跟着 lib name 走：保持 `musiccard.dll`，plugin.json 的 entry 不用改。
+name = "musiccard"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fuyubot-plugin-api.workspace = true
+# 卡片渲染：Chromium-free 的 HTML → PNG（借鉴 hyper-render），版面交给 CSS。
+hyper-render.workspace = true
+# 底图模糊 / 渐变叠加 / 封面与二维码合成 / 最终编码 JPEG。
+image = { workspace = true, features = ["jpeg", "png"] }
+# 二维码生成。
+qrcode = "0.14"
+# 网易云接口走阻塞式 HTTP：命令本来就在独立业务线程里跑，不需要 async runtime。
+ureq.workspace = true
+# 表单体百分号编码。
+urlencoding = "2"
+serde_json.workspace = true
+thiserror.workspace = true
+# 卡片上的日期（month/day）按宿主本地时区取。
+chrono = { version = "0.4", default-features = false, features = ["clock"] }

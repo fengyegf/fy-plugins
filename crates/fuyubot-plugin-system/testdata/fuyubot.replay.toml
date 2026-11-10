@@ -1,0 +1,17 @@
+# 离线回放用的最小配置：不接 TDLib，只验证插件加载 + /system 命令链路。
+# 超时调到 300ms，避免没有 TDLib 时每条查询各等 5 秒。
+[bot]
+name = "replay"
+
+[plugins]
+dir = "plugins"
+
+[telegram]
+account_type = "bot"
+api_id = 1
+data_dir = "data"
+
+[plugin.system]
+super_admin = 8007980715
+background_url = ""
+timeout_ms = 300

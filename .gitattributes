@@ -1,0 +1,14 @@
+# 统一按 LF 入库；Windows 上由 git 自行处理检出。
+* text=auto
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+.gitignore text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.zip binary

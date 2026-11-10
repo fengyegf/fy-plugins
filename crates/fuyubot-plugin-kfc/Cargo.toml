@@ -1,0 +1,24 @@
+# kfc：点个肯德基吧——抓一句肯德基疯话，渲染成推特卡片发回去。
+#
+# 本 crate 同时产出两种库目标：
+# - `cdylib`：宿主 dlopen 的插件动态库（`kfc.dll` / `libkfc.so`）；
+# - `rlib`：可被其他 Rust 代码依赖 / 被 `cargo test`、`examples/` 使用的库。
+[package]
+name = "fuyubot-plugin-kfc"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "点个肯德基吧：抓一句肯德基疯话，渲染成推特卡片发回去"
+license = "LGPL-3.0-or-later"
+
+[lib]
+# 动态库文件名跟着 lib name 走：保持 `kfc.dll`，plugin.json 的 entry 不用改。
+name = "kfc"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fuyubot-plugin-api.workspace = true
+hyper-render.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true

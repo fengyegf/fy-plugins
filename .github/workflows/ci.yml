@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        # 依赖里 Blitz / Vello 的编译量很大，缓存命中后这一步才划算。
+        # vendored 的 fuyubot-plugin-api 是上游源码，不参与本仓的 -D warnings 门槛。
+        run: >-
+          cargo clippy --workspace --exclude fuyubot-plugin-api
+          --all-targets --locked -- -D warnings
