@@ -9,7 +9,9 @@
   "platforms": [
     "windows-x86_64",
     "linux-x86_64",
-    "macos-aarch64"
+    "macos-aarch64",
+    "android-aarch64",
+    "android-x86_64"
   ],
   "description": "生成 Epic 免费游戏卡片并以照片回复消息。"
 }

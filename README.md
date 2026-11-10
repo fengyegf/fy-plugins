@@ -15,10 +15,10 @@
 | --- | --- | --- | --- | --- |
 | `whois` | `crates/fuyubot-plugin-whois` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
 | `musiccard` | `crates/fuyubot-plugin-musiccard` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bin/musiccard.dll` |
-| `epic` | `crates/fuyubot-plugin-epic` | 0.1.0 | Windows / Linux / macOS | `epic.dll` |
-| `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.0 | Windows / Linux / macOS | `kfc.dll` |
-| `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.0 | Windows / Linux / macOS | `ppxfy.dll` |
-| `system` | `crates/fuyubot-plugin-system` | 0.1.0 | Windows / Linux / macOS | `system.dll` |
+| `epic` | `crates/fuyubot-plugin-epic` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `epic.dll` |
+| `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
+| `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.0 | Windows / Linux / macOS（**不含 Android**） | `ppxfy.dll` |
+| `system` | `crates/fuyubot-plugin-system` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
 
 平台列表的唯一来源是各 crate 的 `plugin.json`；发布流水线按它生成构建矩阵。
 
@@ -32,7 +32,7 @@
 | `windows-x86_64` | 本机 `cargo build --release` + `fuyubot-sdk.exe check` + `package.py` | 6/6 通过 |
 | `linux-x86_64` | GitHub Actions `verify-platforms`（ubuntu-latest） | 6/6 通过 |
 | `macos-aarch64` | GitHub Actions `verify-platforms`（macos-15） | 6/6 通过 |
-| `android-aarch64` / `android-x86_64` | 本机 NDK 27.2 + `cargo ndk` + `package.py`（whois / musiccard） | 4/4 通过 |
+| `android-aarch64` / `android-x86_64` | 本机 NDK 27.2 + `cargo ndk` + `package.py`（whois / musiccard / epic / kfc / system） | 10/10 通过 |
 
 验证记录：<https://github.com/fengyegf/fy-plugins/actions/runs/42824916393>。
 其中只有 Windows 产物跑过宿主的 `fuyubot-sdk check`（ABI 5）；Linux / macOS / Android
@@ -42,8 +42,8 @@
 
 **不能打包的**：
 
-- 没在 `plugin.json` 里声明的平台——例如 ppxfy 的 Android、epic/kfc 的 Android，
-  `package.py` 会直接报错；
+- 没在 `plugin.json` 里声明的平台——例如 ppxfy 的 Android（它依赖 native-tls，
+  Android 交叉编译链没打通，**故意不声明**），`package.py` 会直接报错；
 - 声明了但没构建过的平台——`package.py` 找不到 `target/.../release/lib*.{so,dll,dylib}`
   就报错，不会产出空包；
 - 脚本只认五个平台键：`windows-x86_64`、`linux-x86_64`、`macos-aarch64`、
