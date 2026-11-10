@@ -1,5 +1,7 @@
 # FuyuBot Plugins（Rust 原生插件源码仓）
 
+仓库：<https://github.com/fengyegf/fy-plugins>
+
 一个 Cargo workspace 管理全部原生插件。每个插件是一个**独立版本的库 crate**
 （`rlib` + `cdylib`），可以单独打 tag、单独构建、单独发布，互不牵连。
 
@@ -92,23 +94,20 @@ bundle 契约（与商城一致）：
 
 ## 收录到插件商城
 
-> 下面的 `CatMoeCircle/FuyuBot-plugins-src` 是占位仓库名；新建仓库后全局替换成实际地址。
-> 本仓只负责产出 Release 资产，商城索引仍由 `FuyuBot-plugins` 仓的 PR 维护。
-
 商城仓的 `plugins/<id>.yml` 指向本仓库的 Release：
 
 ```yaml
-repo: CatMoeCircle/FuyuBot-plugins-src   # 换成实际仓库
-homepage: https://github.com/CatMoeCircle/FuyuBot-plugins-src
+repo: fengyegf/fy-plugins
+homepage: https://github.com/fengyegf/fy-plugins
 versions:
-  - version: 0.1.2
-    tag: whois-v0.1.2                    # 一个仓库多个插件，tag 必须带 id 前缀
+  - version: 0.1.1
+    tag: whois-v0.1.1                    # 一个仓库多个插件，tag 必须带 id 前缀
     assets:
-      windows-x86_64: whois-0.1.2-windows-x86_64.zip
-      linux-x86_64: whois-0.1.2-linux-x86_64.zip
-      macos-aarch64: whois-0.1.2-macos-aarch64.zip
-      android-aarch64: whois-0.1.2-android-aarch64.zip
-      android-x86_64: whois-0.1.2-android-x86_64.zip
+      windows-x86_64: whois-0.1.1-windows-x86_64.zip
+      linux-x86_64: whois-0.1.1-linux-x86_64.zip
+      macos-aarch64: whois-0.1.1-macos-aarch64.zip
+      android-aarch64: whois-0.1.1-android-aarch64.zip
+      android-x86_64: whois-0.1.1-android-x86_64.zip
 ```
 
 资产 URL 由 `repo` + `tag` + 文件名拼出来，所以 tag 必须用 `<id>-v<version>`；
