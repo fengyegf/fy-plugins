@@ -143,6 +143,11 @@ def main() -> int:
             f"{crate.name}/plugin.json 的 version 与 Cargo.toml 不一致："
             f"{manifest.get('version')!r} != {cargo_version!r}"
         )
+    declared = manifest.get("platforms") or []
+    if args.platform not in declared:
+        raise SystemExit(
+            f"{crate.name}/plugin.json 没有声明 {args.platform}；已声明：{declared}"
+        )
 
     extension, triple = PLATFORMS[args.platform]
     library = library_file(library_name, extension)

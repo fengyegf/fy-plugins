@@ -7,8 +7,8 @@
 
 输出 JSON（stdout）：
     {"id": "...", "version": "...", "platforms": [...],
-     "matrix": {"include": [{"platform": "...", "os": "...", "target": null,
-                             "android_abi": null}, ...]}}
+     "matrix": {"include": [{"platform": "...", "os": "...", "target": "",
+                             "android_abi": ""}, ...]}}
 
 `--github-output` 会把 `id` / `version` / `matrix` 追加到 `$GITHUB_OUTPUT`。
 """
