@@ -50,8 +50,9 @@
   `android-aarch64`、`android-x86_64`（没有 windows-aarch64 / linux-aarch64 /
   macOS x86_64）。
 
-发布前想重新核对整张矩阵，手动跑 `verify-platforms` workflow
-（Actions → verify-platforms → Run workflow），或推 `verify/platforms` 分支。
+发布前想重新核对桌面平台矩阵（Linux / macOS），手动跑 `verify-platforms` workflow
+（Actions → verify-platforms → Run workflow），或推 `verify/platforms` 分支；
+Android 的两端仍按发布流水线（tag）构建。
 
 
 ## 目录
