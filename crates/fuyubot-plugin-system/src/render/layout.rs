@@ -190,9 +190,11 @@ pub const GAUGE_COLUMN_GAP: u32 = 12;
 pub const DISK_TITLE_TOP: u32 = CONTENT_INNER_TOP + SECTION_GAP;
 pub const DISK_PANEL_TOP: u32 = DISK_TITLE_TOP + SECTION_TITLE_HEIGHT + SECTION_TITLE_GAP;
 
-/// 磁盘行：标签列（「磁盘C」）与右侧 `used/total` 列。
-pub const DISK_LABEL_WIDTH: u32 = 72;
-pub const DISK_VALUE_WIDTH: u32 = 210;
+/// 磁盘行：标签列（「磁盘C」/「内部存储」/挂载点）与右侧 `used/total` 列。
+///
+/// 非 Windows 平台的标签是挂载点（`/data`），比单个盘符长，所以标签列给到 96。
+pub const DISK_LABEL_WIDTH: u32 = 96;
+pub const DISK_VALUE_WIDTH: u32 = 200;
 pub const DISK_COLUMN_GAP: u32 = 12;
 
 // ---------------------------------------------------------------------------
@@ -210,8 +212,8 @@ pub const CHIP_PADDING_X: u32 = 8;
 pub const CHIP_GAP: u32 = 5;
 /// 名字与状态之间的间距。
 pub const CHIP_INNER_GAP: u32 = 4;
-/// 最多两行胶囊。
-pub const CHIP_MAX_ROWS: u32 = 2;
+/// 胶囊行数的硬上限：防止异常数据把面板撑出画布（正常由 [`max_chip_rows`] 决定）。
+pub const MAX_CHIP_ROWS: u32 = 12;
 
 /// 磁盘面板高度：边框 2 + 内边距 16 + `rows × 28`。
 pub fn disk_panel_height(rows: u32) -> u32 {
@@ -235,12 +237,24 @@ pub const PLUGIN_FOOTER_HEIGHT: u32 = 16;
 
 /// 插件面板高度：**按内容自适应**（不再铺满右列剩余空间）。
 ///
-/// `chip_rows` 是实际排出来的胶囊行数（1–2）；插件为空时也传 1，占位行按
-/// [`ROW_HEIGHT`] 算（比胶囊高 4px，取两者较大值兜住）。
+/// `chip_rows` 是实际排出来的胶囊行数（1–[`MAX_CHIP_ROWS`]）；插件为空时也传 1，
+/// 占位行按 [`ROW_HEIGHT`] 算（比胶囊高 4px，取两者较大值兜住）。
 pub fn plugin_panel_height(chip_rows: u32) -> u32 {
     let rows = chip_rows.max(1);
     let chips = rows * CHIP_HEIGHT + (rows - 1) * CHIP_GAP;
     PANEL_CHROME + chips.max(ROW_HEIGHT) + PLUGIN_FOOTER_GAP + PLUGIN_FOOTER_HEIGHT
+}
+
+/// 在给定磁盘行数下，右列还能放下几行插件胶囊。
+///
+/// 卡片高度是固定的，插件面板底端不能越过内容区底端；剩下的高度除了胶囊本身，
+/// 还要扣掉面板边框 / 内边距与底部统计行。行数决定后，放不下的插件才折成 `+N`。
+pub fn max_chip_rows(disk_rows: u32) -> u32 {
+    let available = CONTENT_INNER_BOTTOM
+        .saturating_sub(plugin_panel_top(disk_rows))
+        .saturating_sub(PANEL_CHROME + PLUGIN_FOOTER_GAP + PLUGIN_FOOTER_HEIGHT);
+    let rows = (available + CHIP_GAP) / (CHIP_HEIGHT + CHIP_GAP);
+    rows.clamp(1, MAX_CHIP_ROWS)
 }
 
 /// 画布高度兜底校验用：右列最低点不应越过内容区底端。
@@ -277,17 +291,26 @@ mod tests {
             "CPU / RAM 两条 gauge 应当放得下"
         );
 
-        // 右列：插件面板按内容自适应，1 行比 2 行矮，且 4 块磁盘 + 2 行胶囊不越过底端。
+        // 右列：插件面板按内容自适应；可用行数由磁盘行数决定，且永远不越过底端。
         for rows in 1..=4 {
-            let height = plugin_panel_height(2);
-            let bottom = plugin_panel_top(rows) + height;
+            let chip_rows = max_chip_rows(rows);
+            assert!(chip_rows >= 2, "至少能放两行胶囊（实际 {chip_rows} 行）");
+            let bottom = plugin_panel_top(rows) + plugin_panel_height(chip_rows);
             assert!(
                 bottom <= CONTENT_INNER_BOTTOM,
-                "{rows} 块磁盘 + 两行胶囊越过了内容区底端（{bottom} > {CONTENT_INNER_BOTTOM}）"
+                "{rows} 块磁盘 + {chip_rows} 行胶囊越过了内容区底端（{bottom} > {CONTENT_INNER_BOTTOM}）"
             );
         }
         assert!(
-            plugin_panel_height(1) < plugin_panel_height(2),
+            max_chip_rows(1) > max_chip_rows(4),
+            "磁盘越多，留给插件胶囊的行数越少"
+        );
+        assert!(
+            max_chip_rows(4) >= 5,
+            "四块磁盘时也要能放下常见数量（5 个以上）的插件"
+        );
+        assert!(
+            plugin_panel_height(max_chip_rows(1)) > plugin_panel_height(2),
             "插件面板必须随胶囊行数变高，而不是固定高度"
         );
 

@@ -45,25 +45,25 @@ pub fn sample_card() -> CardData {
         ],
         disks: vec![
             DiskUsage {
-                label: "C".to_owned(),
+                label: "磁盘C".to_owned(),
                 used: "218.42 GB".to_owned(),
                 total: "476.94 GB".to_owned(),
                 usage_percent: 46,
             },
             DiskUsage {
-                label: "D".to_owned(),
+                label: "磁盘D".to_owned(),
                 used: "812.05 GB".to_owned(),
                 total: "1.81 TB".to_owned(),
                 usage_percent: 44,
             },
             DiskUsage {
-                label: "E".to_owned(),
+                label: "磁盘E".to_owned(),
                 used: "1.24 TB".to_owned(),
                 total: "1.81 TB".to_owned(),
                 usage_percent: 68,
             },
             DiskUsage {
-                label: "F".to_owned(),
+                label: "磁盘F".to_owned(),
                 used: "96.31 GB".to_owned(),
                 total: "931.51 GB".to_owned(),
                 usage_percent: 10,
@@ -108,7 +108,7 @@ pub fn sample_card_no_admin() -> CardData {
             },
         ],
         disks: vec![DiskUsage {
-            label: "C".to_owned(),
+            label: "磁盘C".to_owned(),
             used: "412.55 GB".to_owned(),
             total: "476.94 GB".to_owned(),
             usage_percent: 86,

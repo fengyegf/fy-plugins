@@ -26,9 +26,10 @@ TS 版 `E:\Fuyu_TDBot\plugins\system`（`index.ts` + `system.vue`，Vue + satori
   - 管理员（`[plugin.system] super_admin`）头像、名字、`@username`、ID 与留言提示；
   - TDLib 版本与 commit hash（`getOption`）；
   - CPU / RAM 使用率进度条（`sysinfo`，CPU 两次采样；SWAP 按需求去掉）；
-  - 磁盘占用（盘符、已用 / 总量、百分比，最多 4 块）；
-  - 宿主进程里已加载的插件胶囊（名字 + 运行状态），面板高度**随内容自适应**，
-    不再固定铺满右列。
+  - 磁盘占用（Windows 盘符「磁盘C」；Linux 是「根目录」/挂载点、macOS 是卷名、
+    Android 是「内部存储」/「外部存储」；已用 / 总量、百分比，最多 4 块）；
+  - 宿主进程里已加载的插件胶囊（名字 + 运行状态），行数与面板高度**随右列剩余空间
+    自适应**，常见数量（6–20 个）会全部画出，只有真的放不下才折成 `+N`；
 - 所有外部依赖失败都**降级不炸**：TDLib 查询失败显示「未知」，头像拿不到画占位图，
   背景图下载失败退回渐变，插件清单读不到显示「暂无数据」。
 - 临时 JPEG 在发送完成后自动删除；采集、下载、渲染都在独立业务线程里跑，不阻塞 TDLib。
@@ -165,7 +166,9 @@ cd <fuyubot 发行目录>
 
 - hyper-render 只认系统字体，中文依赖系统 CJK 字体（Windows 上是微软雅黑）。
 - `@font-face`、外部图片加载未支持；背景与头像所以在 Rust 侧合成。
-- 磁盘只统计 Windows 盘符卷（A–Z），最多 4 块。
+- 磁盘按平台取标签：Windows 是盘符（「磁盘C」），Linux 是 `根目录` / 挂载点，
+  macOS 是 `系统磁盘` / 卷名，Android 是 `内部存储` / `外部存储`；伪文件系统
+  （proc / sysfs / tmpfs / 快照）与 Android 只读系统镜像不会占位，最多 4 块。
 - 插件胶囊没有版本号：宿主 `list_plugins` 只暴露名字与状态。
 - 后台图默认来自 TS 版 `system.vue` 里的 B 站图片；离线环境请配置
   `background_url = ""` 或预先把缓存文件放到系统临时目录。

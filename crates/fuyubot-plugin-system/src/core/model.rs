@@ -52,7 +52,8 @@ pub struct Gauge {
 /// 一块磁盘的占用情况。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DiskUsage {
-    /// 盘符，如 `C`（渲染层显示成「磁盘C」）。
+    /// 直接显示在卡片上的标签：
+    /// Windows 是「磁盘C」，Linux 是「根目录」/挂载点，Android 是「内部存储」/「外部存储」。
     pub label: String,
     /// 已用空间，已格式化成 `12.34 GB`。
     pub used: String,

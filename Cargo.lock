@@ -1191,7 +1191,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-system"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "fuyubot-plugin-api",
  "hyper-render",

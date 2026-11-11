@@ -698,17 +698,17 @@ fn push_disk_section(out: &mut Html, card: &CardData) {
 
     for (index, disk) in disks.iter().enumerate() {
         let top = row_top + index as u32 * layout::ROW_HEIGHT;
-        // 「磁盘C」这类标签正常只有一个字符；遇到长卷标先缩字号再截断，别一上来就砍。
-        let label_text = format!("磁盘{}", disk.label);
+        // 标签已经在采集层定好（「磁盘C」/「内部存储」/挂载点）；长挂载点先缩字号再截断。
+        let label_text = disk.label.as_str();
         let label_font = fit_font_size(
-            &label_text,
+            label_text,
             layout::DISK_LABEL_WIDTH as f32 - 2.0,
             layout::ROW_FONT as f32,
             13.0,
             false,
         );
         let label = fit_text_fixed(
-            &label_text,
+            label_text,
             layout::DISK_LABEL_WIDTH as f32,
             label_font,
             false,
@@ -762,7 +762,7 @@ fn push_disk_section(out: &mut Html, card: &CardData) {
     }
 }
 
-/// 已加载插件：手算坐标换行的胶囊，最多两行，超出的折成 `+N`。
+/// 已加载插件：手算坐标换行的胶囊，行数上限由右列剩余高度决定，超出的才折成 `+N`。
 ///
 /// 面板高度**按实际排出来的胶囊行数算**（[`layout::plugin_panel_height`]），
 /// 不铺满右列的剩余空间——插件少的时候就是一个贴着内容的盒子。
@@ -773,7 +773,8 @@ fn push_plugin_section(out: &mut Html, card: &CardData) {
 
     // 先排版、再画面板：面板高度取决于真正放下了几行胶囊。
     let specs = chip_specs(&card.plugins);
-    let placements = place_chips(&specs, layout::PANEL_INNER_WIDTH);
+    let max_rows = layout::max_chip_rows(disk_rows);
+    let placements = place_chips(&specs, layout::PANEL_INNER_WIDTH, max_rows);
     let chip_rows = placements
         .iter()
         .map(|chip| chip.row + 1)
@@ -979,18 +980,19 @@ fn tail_chip(label: String, x: u32, row: u32) -> PlacedChip {
     }
 }
 
-/// 把前 `count` 枚胶囊按两行折行，返回（已放下的胶囊，下一格的 x，最后一行行号）。
+/// 把前 `count` 枚胶囊按 `max_rows` 行折行，返回（已放下的胶囊，下一格的 x，最后一行行号）。
 fn layout_prefix(
     specs: &[ChipSpec],
     count: usize,
     inner_width: u32,
+    max_rows: u32,
 ) -> (Vec<PlacedChip>, u32, u32) {
     let mut placed = Vec::with_capacity(count.min(specs.len()));
     let mut cursor = 0u32;
     let mut row = 0u32;
     for spec in specs.iter().take(count) {
         if cursor > 0 && cursor + spec.width > inner_width {
-            if row + 1 >= layout::CHIP_MAX_ROWS {
+            if row + 1 >= max_rows {
                 break;
             }
             row += 1;
@@ -1008,15 +1010,16 @@ fn layout_prefix(
     (placed, cursor, row)
 }
 
-/// 一行能放几枚就是几枚；最多两行，放不下的用 `+N` 收尾。
+/// 一行能放几枚就是几枚；最多 `max_rows` 行，放不下的用 `+N` 收尾。
 ///
-/// `+N` 自己也要占地方：优先接在最后一行末尾，其次另起一行（未满两行时），
-/// 两行都满了就一枚一枚地让出位置给它，因此循环必然终止。
-fn place_chips(specs: &[ChipSpec], inner_width: u32) -> Vec<PlacedChip> {
+/// `+N` 自己也要占地方：优先接在最后一行末尾，其次另起一行（未满行数时），
+/// 行数满了就一枚一枚地让出位置给它，因此循环必然终止。
+fn place_chips(specs: &[ChipSpec], inner_width: u32, max_rows: u32) -> Vec<PlacedChip> {
     if specs.is_empty() {
         return Vec::new();
     }
-    let (mut placed, mut cursor, mut row) = layout_prefix(specs, specs.len(), inner_width);
+    let (mut placed, mut cursor, mut row) =
+        layout_prefix(specs, specs.len(), inner_width, max_rows);
     if placed.len() == specs.len() {
         return placed;
     }
@@ -1035,15 +1038,15 @@ fn place_chips(specs: &[ChipSpec], inner_width: u32) -> Vec<PlacedChip> {
             placed.push(tail_chip(label, cursor, row));
             return placed;
         }
-        if row + 1 < layout::CHIP_MAX_ROWS && tail_width <= inner_width {
+        if row + 1 < max_rows && tail_width <= inner_width {
             placed.push(tail_chip(label, 0, row + 1));
             return placed;
         }
 
-        // 两行都满：让出最后一枚胶囊的位置。
+        // 行数满了：让出最后一枚胶囊的位置。
         fitted -= 1;
         overflow += 1;
-        let prefix = layout_prefix(specs, fitted, inner_width);
+        let prefix = layout_prefix(specs, fitted, inner_width, max_rows);
         placed = prefix.0;
         cursor = prefix.1;
         row = prefix.2;
@@ -1163,23 +1166,24 @@ mod tests {
         assert!(truncated.chars().count() < text.chars().count());
     }
 
-    /// 胶囊排版：两行封顶，放不下的折成 `+N`，且不越过面板内宽。
+    /// 胶囊排版：行数上限内换行，放不下的折成 `+N`，且不越过面板内宽。
     #[test]
-    fn chips_wrap_and_cap_at_two_rows() {
-        let plugins: Vec<PluginChip> = (0..30)
+    fn chips_wrap_and_only_tail_when_out_of_rows() {
+        // 60 个插件远超任何可用行数的容量：最后一枚必须是 `+N`。
+        let plugins: Vec<PluginChip> = (0..60)
             .map(|index| PluginChip {
                 name: format!("plugin-{index}"),
                 state: "active".to_owned(),
             })
             .collect();
+        let max_rows = layout::max_chip_rows(1);
         let specs = chip_specs(&plugins);
-        let placed = place_chips(&specs, layout::PANEL_INNER_WIDTH);
+        let placed = place_chips(&specs, layout::PANEL_INNER_WIDTH, max_rows);
         assert!(!placed.is_empty());
         for chip in &placed {
-            assert!(chip.row < layout::CHIP_MAX_ROWS);
+            assert!(chip.row < max_rows, "行号 {} 超过上限 {max_rows}", chip.row);
             assert!(chip.x + chip.width <= layout::PANEL_INNER_WIDTH);
         }
-        // 一定有 `+N` 收尾。
         assert!(
             placed
                 .last()
@@ -1187,13 +1191,29 @@ mod tests {
                 .unwrap_or(false),
             "溢出时最后应当是一个 +N 胶囊"
         );
+    }
 
-        // 少量插件时全部放下，不出现 `+N`。
-        let few: Vec<PluginChip> = plugins.into_iter().take(3).collect();
-        let specs = chip_specs(&few);
-        let placed = place_chips(&specs, layout::PANEL_INNER_WIDTH);
-        assert_eq!(placed.len(), 3);
-        assert!(placed.iter().all(|chip| !chip.name.starts_with('+')));
+    /// 常见数量（6 个）的插件，无论几块磁盘都应当完整显示，不出现 `+N`。
+    #[test]
+    fn common_plugin_counts_are_all_drawn() {
+        let plugins: Vec<PluginChip> = ["system", "whois", "kfc", "epic", "musiccard", "help"]
+            .iter()
+            .map(|name| PluginChip {
+                name: (*name).to_owned(),
+                state: "active".to_owned(),
+            })
+            .collect();
+        for disk_rows in 1..=4 {
+            let max_rows = layout::max_chip_rows(disk_rows);
+            let specs = chip_specs(&plugins);
+            let placed = place_chips(&specs, layout::PANEL_INNER_WIDTH, max_rows);
+            assert_eq!(
+                placed.len(),
+                plugins.len(),
+                "{disk_rows} 块磁盘时应能显示全部 6 个插件"
+            );
+            assert!(placed.iter().all(|chip| !chip.name.starts_with('+')));
+        }
     }
 
     /// 空数据也要有兜底文案，且不影响后续区块。
