@@ -13,14 +13,22 @@
 
 | id | crate | 版本 | 平台 | 入口 |
 | --- | --- | --- | --- | --- |
-| `whois` | `crates/fuyubot-plugin-whois` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
-| `musiccard` | `crates/fuyubot-plugin-musiccard` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bin/musiccard.dll` |
-| `epic` | `crates/fuyubot-plugin-epic` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `epic.dll` |
-| `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
+| `whois` | `crates/fuyubot-plugin-whois` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
+| `musiccard` | `crates/fuyubot-plugin-musiccard` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bin/musiccard.dll` |
+| `epic` | `crates/fuyubot-plugin-epic` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `epic.dll` |
+| `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
 | `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.1 | Windows / Linux / macOS（**不含 Android**） | `ppxfy.dll` |
-| `system` | `crates/fuyubot-plugin-system` | 0.1.1 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
+| `system` | `crates/fuyubot-plugin-system` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
 
 平台列表的唯一来源是各 crate 的 `plugin.json`；发布流水线按它生成构建矩阵。
+
+> **图像生成**：`epic` / `kfc` / `musiccard` / `system` / `whois` 的卡片图统一由宿主上的
+> [`fuyubot.html2img`](https://github.com/xiaoqvan/fuyubot-plugins/tree/main/crates/fuyubot-plugin-html2img)
+> 插件渲染（`host.call_service("fuyubot.html2img", "render", …)`）：每个插件的卡片界面是
+> `assets/card.html` 里的 **Vue 模板 + 内联 CSS**，Rust 只负责把业务数据凑成 `data`，
+> 渲染时传 `vue: true`；渲染器（hyper-render + Blitz + Vello，纯 Rust、无 Chromium）全仓只有一份。
+> 这几个插件都用 `Plugin::inject` 声明了**硬依赖**，没装 html2img 时会停在 Pending，
+> 不会启动后每条命令都失败。`ppxfy` 不做图像生成，没有这个依赖。
 
 ### 平台验证状态
 
@@ -78,7 +86,7 @@ scripts/
 ## 环境
 
 - Rust 1.99+（`rust-version` 在根 `Cargo.toml`）
-- 插件 ABI：**v5**（宿主当前版本）
+- 插件 ABI：**v6**（宿主当前版本）
 - 打包脚本：Python 3.9+（只用标准库）
 
 ## 构建与检查
@@ -171,7 +179,7 @@ crate、改回 registry 依赖即可，插件源码不用动。
 ## 依赖与锁文件
 
 - `Cargo.lock` 必须提交：插件是动态库，构建结果要可复现；
-- 不要随手 `cargo update`，尤其是 `hyper-render`、`image`、`fuyubot-abi`；
+- 不要随手 `cargo update`，尤其是 `image`、`fuyubot-abi`；
 - 第三方补丁只有 `vendor/zip`（见根 `Cargo.toml` 的 `[patch.crates-io]`）。
 
 ## 协议
