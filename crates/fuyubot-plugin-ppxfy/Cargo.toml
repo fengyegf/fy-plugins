@@ -7,7 +7,7 @@
 # zip 的本地补丁在 workspace 根 `[patch.crates-io]`，见根 Cargo.toml。
 [package]
 name = "fuyubot-plugin-ppxfy"
-version = "0.1.1"
+version = "0.1.3"
 edition.workspace = true
 rust-version.workspace = true
 description = "从 DMM / DLSite 下载并解压作品，附带记录与 Telegraph 上传"

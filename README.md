@@ -13,12 +13,12 @@
 
 | id | crate | 版本 | 平台 | 入口 |
 | --- | --- | --- | --- | --- |
-| `whois` | `crates/fuyubot-plugin-whois` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
-| `musiccard` | `crates/fuyubot-plugin-musiccard` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bin/musiccard.dll` |
-| `epic` | `crates/fuyubot-plugin-epic` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `epic.dll` |
-| `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
-| `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.1 | Windows / Linux / macOS（**不含 Android**） | `ppxfy.dll` |
-| `system` | `crates/fuyubot-plugin-system` | 0.1.2 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
+| `whois` | `crates/fuyubot-plugin-whois` | 0.1.3 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `whois.dll` |
+| `musiccard` | `crates/fuyubot-plugin-musiccard` | 0.1.3 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bin/musiccard.dll` |
+| `epic` | `crates/fuyubot-plugin-epic` | 0.1.3 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `epic.dll` |
+| `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.3 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
+| `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.3 | Windows / Linux / macOS（**不含 Android**） | `ppxfy.dll` |
+| `system` | `crates/fuyubot-plugin-system` | 0.1.3 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
 
 平台列表的唯一来源是各 crate 的 `plugin.json`；发布流水线按它生成构建矩阵。
 
