@@ -1,4 +1,5 @@
-//! 内置样张：不联网、不读外部文件也能出图，供 example、单测和调样式用。
+//! 内置样张：不联网、不读外部文件也能生成卡片数据（`view_data` 的输入），
+//! 供 example、单测和调样式用。
 //!
 //! 覆盖这几种典型版面（也是「极端数据不 panic」的回归用例）：
 //!
@@ -9,12 +10,17 @@
 //! | [`sample_card_long_names`] | 超长机器人名 / 用户名、长插件名（截断与缩字号）、3 块磁盘 |
 //! | [`sample_card_empty`] | 全空数据（三处「暂无数据」兜底） |
 //!
-//! [`sample_assets`] 现场画 3 张纯色 / 渐变小图当头像与背景——所有内容都由
-//! `image` 在内存里合成，不依赖磁盘上的任何文件。
+//! [`sample_assets`] 现场画两张纯色 / 渐变小图当头像——都由 `image` 在内存里合成，
+//! 不依赖磁盘上的任何文件。背景不再需要素材：它只是一条公网 URL（见
+//! [`SAMPLE_BACKGROUND_URL`]），由 html2img 自己加载。
 
 use image::{ImageFormat, Rgb, RgbImage};
 
 use crate::core::model::{Assets, CardData, DiskUsage, Gauge, Identity, PluginChip, TdlibInfo};
+
+/// 调样式用的背景 URL：TS 版 `system.vue` 里写死的那张 B 站图（公网 https）。
+pub const SAMPLE_BACKGROUND_URL: &str =
+    "https://i0.hdslb.com/bfs/article/cc4a3e435ac47a6190aebf4f74a8675b88a183bb.jpg";
 
 /// 完整样张：机器人 + 管理员 + CPU/RAM 两条 gauge + 四块磁盘 + 十个插件。
 pub fn sample_card() -> CardData {
@@ -187,13 +193,19 @@ pub fn sample_card_empty() -> CardData {
     CardData::default()
 }
 
-/// 样张素材：机器人头像、管理员头像、背景图，全部在内存里画出来（PNG 字节）。
+/// 样张素材：机器人头像、管理员头像，全部在内存里画出来（PNG 字节）。
+///
+/// 尺寸故意大于 192px（256 / 192），好让「缩到 ≤192px」这一步也被单测走到。
 pub fn sample_assets() -> Assets {
     Assets {
         bot_photo: Some(bot_photo_png()),
         admin_photo: Some(admin_photo_png()),
-        background: Some(background_png()),
     }
+}
+
+/// 造一张 `width × height` 的纯色 PNG，用来测「大头像必须先缩小」。
+pub fn large_photo_png(width: u32, height: u32) -> Vec<u8> {
+    encode_png(&RgbImage::from_pixel(width, height, Rgb([24, 144, 255])))
 }
 
 /// 造一枚插件胶囊。
@@ -254,54 +266,6 @@ fn admin_photo_png() -> Vec<u8> {
     encode_png(&image)
 }
 
-/// 背景图：1600×900 蓝→紫渐变 + 几个软边色块，用来验证 cover-fit 与白色蒙版的观感。
-fn background_png() -> Vec<u8> {
-    const WIDTH: u32 = 1600;
-    const HEIGHT: u32 = 900;
-    let mut image = RgbImage::new(WIDTH, HEIGHT);
-
-    for (x, y, pixel) in image.enumerate_pixels_mut() {
-        let t = (x as f32 * 0.6 + y as f32 * 0.4) / (WIDTH as f32 * 0.6 + HEIGHT as f32 * 0.4);
-        *pixel = Rgb([
-            lerp(59.0, 192.0, t),
-            lerp(130.0, 132.0, t),
-            lerp(246.0, 252.0, t),
-        ]);
-    }
-
-    // 三个软边圆：黄 / 绿 / 白，纯手工混色，避免引入额外依赖。
-    let blobs = [
-        (
-            1240.0f32,
-            320.0f32,
-            260.0f32,
-            [251.0f32, 191.0f32, 36.0f32],
-            0.55f32,
-        ),
-        (980.0, 720.0, 300.0, [16.0, 185.0, 129.0], 0.45),
-        (1420.0, 760.0, 220.0, [255.0, 255.0, 255.0], 0.5),
-    ];
-    for (cx, cy, radius, color, max_alpha) in blobs {
-        for (x, y, pixel) in image.enumerate_pixels_mut() {
-            let dx = x as f32 + 0.5 - cx;
-            let dy = y as f32 + 0.5 - cy;
-            let distance = (dx * dx + dy * dy).sqrt();
-            if distance >= radius {
-                continue;
-            }
-            // 从圆心到边缘平滑降到 0。
-            let alpha = (1.0 - distance / radius).powi(2) * max_alpha;
-            // 只混合 RGB，保留 alpha 通道。
-            for (dst, src) in pixel.0.iter_mut().take(3).zip(color) {
-                *dst = (*dst as f32 * (1.0 - alpha) + src * alpha)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
-            }
-        }
-    }
-    encode_png(&image)
-}
-
 /// 线性插值。
 fn lerp(from: f32, to: f32, t: f32) -> u8 {
     (from + (to - from) * t.clamp(0.0, 1.0))
@@ -350,13 +314,15 @@ mod tests {
         let assets = sample_assets();
         let bot = assets.bot_photo.expect("应当有机器人头像");
         let admin = assets.admin_photo.expect("应当有管理员头像");
-        let background = assets.background.expect("应当有背景图");
 
         let bot = image::load_from_memory(&bot).expect("头像应当是合法图片");
         let admin = image::load_from_memory(&admin).expect("头像应当是合法图片");
-        let background = image::load_from_memory(&background).expect("背景应当是合法图片");
         assert_eq!((bot.width(), bot.height()), (256, 256));
         assert_eq!((admin.width(), admin.height()), (192, 192));
-        assert_eq!((background.width(), background.height()), (1600, 900));
+    }
+
+    #[test]
+    fn sample_background_url_is_public_https() {
+        assert!(SAMPLE_BACKGROUND_URL.starts_with("https://"));
     }
 }

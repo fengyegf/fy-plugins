@@ -9,21 +9,23 @@
 //!   → getMe() + 头像                   // TDLib
 //!   → getConfig("admin").super_admin → getUser(admin) + 头像  // 配置 + TDLib
 //!   → pluginManager.getPlugins()      // 宿主 list_plugins
-//!   → generateImage(system.vue)       // render::render_card（hyper-render）
+//!   → render::render_card(card, …)    // Vue 模板 + data → 宿主 fuyubot.html2img
 //!   → sendMessage({photo})            // host::messenger
-//!   → 删除临时文件
+//!   → 删除渲染产物
 //! ```
 //!
 //! 与 TS 版的两处主动降级（都是宿主能力决定的，见 README）：
 //! - TDLib 查询失败不炸整条命令：卡片照出，对应字段显示「未知」；
 //! - 管理员来自 `[plugin.system] super_admin` 配置，不配就显示「未配置」。
+//!
+//! 渲染是**阻塞**调用（html2img 在宿主进程里同步跑完），整条流程只能待在业务线程里，
+//! 不能在宿主回调里调。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use serde_json::Value;
 
-use crate::core::background;
 use crate::core::model::{Assets, CardData, Identity, PluginChip};
 use crate::core::sysinfo;
 use crate::core::td;
@@ -39,14 +41,14 @@ const UNKNOWN: &str = "未知";
 /// 命令入口。
 pub fn run(ctx: &Ctx, msg: Msg) {
     let started = Instant::now();
-    match build_image(ctx) {
-        Ok(jpeg) => {
+    match build_and_render(ctx) {
+        Ok(path) => {
             ctx.info(&format!(
-                "system: 卡片已生成 {} bytes（{} ms）",
-                jpeg.len(),
+                "system: 卡片已生成 {}（{} ms）",
+                path.display(),
                 started.elapsed().as_millis()
             ));
-            send(ctx, msg, &jpeg);
+            send(ctx, msg, &path);
         }
         Err(reason) => {
             ctx.error(&format!("system: 获取系统信息失败: {reason}"));
@@ -56,8 +58,9 @@ pub fn run(ctx: &Ctx, msg: Msg) {
     }
 }
 
-/// 取数据 + 渲染。任何「非致命」的外部依赖失败都在这里降级，只有渲染失败才上抛。
-fn build_image(ctx: &Ctx) -> Result<Vec<u8>, String> {
+/// 取数据 + 调 html2img 渲染。任何「非致命」的外部依赖失败都在这里降级，
+/// 只有渲染失败才上抛。
+fn build_and_render(ctx: &Ctx) -> Result<PathBuf, String> {
     // 1. 系统信息（CPU 两次采样约 200ms）。
     let (snapshot, collect_ms) = sysinfo::collect_timed();
     ctx.info(&format!(
@@ -163,10 +166,11 @@ fn build_image(ctx: &Ctx) -> Result<Vec<u8>, String> {
             .join(", ")
     ));
 
-    // 6. 背景图（可选，失败退回渐变）。
-    let background = background::load(&ctx.config);
-    if background.is_none() {
-        ctx.info("system: 背景图不可用，卡片使用渐变背景");
+    // 6. 背景：不再下载 / 缓存，直接把公网 URL 交给 html2img。
+    if ctx.config.background_url.is_some() {
+        ctx.info("system: 背景图使用公网 URL，由 fuyubot.html2img 拉取");
+    } else {
+        ctx.info("system: 未配置背景图，卡片使用渐变背景");
     }
 
     let card = CardData {
@@ -183,28 +187,34 @@ fn build_image(ctx: &Ctx) -> Result<Vec<u8>, String> {
     let assets = Assets {
         bot_photo,
         admin_photo,
-        background,
     };
 
-    // 7. 渲染（hyper-render + image 合成）。
-    let jpeg = render::render_card(&card, &assets).map_err(|error| error.to_string())?;
-    Ok(jpeg)
+    // 7. 交给 html2img 渲染（阻塞调用，只在业务线程里跑）。
+    render::render_card(
+        &ctx.host,
+        &card,
+        &assets,
+        ctx.config.background_url.as_deref(),
+    )
+    .map_err(|error| error.to_string())
 }
 
-/// 把 JPEG 写到临时文件、以照片回复，然后删除临时文件。
-fn send(ctx: &Ctx, msg: Msg, jpeg: &[u8]) {
-    let path = temp_path(msg);
-    if let Err(error) = std::fs::write(&path, jpeg) {
-        ctx.error(&format!(
-            "system: 写临时文件失败 {}: {error}",
+/// 以照片回复，然后删掉 html2img 的渲染产物。
+fn send(ctx: &Ctx, msg: Msg, path: &Path) {
+    let sent = ctx.messenger.send_photo(msg.chat_id, path, Some(msg.id));
+
+    // 产物在 html2img 的临时目录里，24 小时后服务自己也会清；上传完成后文件就没用了，
+    // 发完就删，别在临时目录里堆图。NotFound 不算错误。
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => ctx.warn(&format!(
+            "system: 删除渲染产物失败 {}: {error}",
             path.display()
-        ));
-        ctx.messenger
-            .try_send_text(msg.chat_id, "❌ 临时文件写入失败", Some(msg.id));
-        return;
+        )),
     }
 
-    match ctx.messenger.send_photo(msg.chat_id, &path, Some(msg.id)) {
+    match sent {
         Ok(sent) => ctx.info(&format!(
             "system: 已发送系统信息卡片（chat={} message_id={}）",
             sent.chat_id, sent.message_id
@@ -215,19 +225,6 @@ fn send(ctx: &Ctx, msg: Msg, jpeg: &[u8]) {
                 .try_send_text(msg.chat_id, FAILED, Some(msg.id));
         }
     }
-
-    // 上传走的是本地文件，发完就删；失败也删，别在系统临时目录里堆图。
-    if let Err(error) = std::fs::remove_file(&path) {
-        ctx.warn(&format!(
-            "system: 删除临时文件失败 {}: {error}",
-            path.display()
-        ));
-    }
-}
-
-/// 临时文件路径：每次命令一个，重名也不会互相覆盖。
-fn temp_path(msg: Msg) -> PathBuf {
-    std::env::temp_dir().join(format!("fuyubot-system-{}-{}.jpg", msg.chat_id, msg.id))
 }
 
 /// 读宿主的插件清单：`{"count":N,"plugins":[{"name","state",…}]}`。
@@ -252,17 +249,4 @@ fn read_plugins(ctx: &Ctx) -> Vec<PluginChip> {
             Some(PluginChip { name, state })
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn temp_path_is_unique_per_message() {
-        let first = temp_path(Msg { chat_id: 1, id: 2 });
-        let second = temp_path(Msg { chat_id: 1, id: 3 });
-        assert_ne!(first, second);
-        assert!(first.to_string_lossy().contains("fuyubot-system-1-2.jpg"));
-    }
 }

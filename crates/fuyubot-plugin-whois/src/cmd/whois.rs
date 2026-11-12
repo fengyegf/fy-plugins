@@ -8,14 +8,13 @@
 //!   → GET /api/whois/info/?raw=1 // core::fetch
 //!   → GET /api/whois/ip/         // 失败不阻塞
 //!   → GET <domain>/favicon.ico   // 失败回退内置图标
-//!   → render::render_card()      // hyper-render
+//!   → render::render_card()      // fuyubot.html2img 服务出图
 //!   → sendMessage({photo})       // host::messenger
-//!   → 删除临时文件
+//!   → 删除 html2img 产物
 //! ```
 //!
 //! 三个分支：接口报错 → 提示失败；`is_available == 1` → 提示未注册；其余 → 出卡片。
 
-use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::core::model::CardData;
@@ -119,8 +118,11 @@ pub fn run(ctx: &Ctx, msg: Msg, arg: Option<String>) {
         None => {}
     }
 
-    let png = match render::render_card(&card, ctx.config.width, icon.as_ref()) {
-        Ok(png) => png,
+    // 出图交给宿主上的 fuyubot.html2img：插件只把卡片数据映射成 Vue 模板的 data，
+    // 产物是服务临时目录里的本机文件（24 小时内有效）。这是阻塞调用，正好跑在
+    // 当前业务线程上。
+    let path = match render::render_card(&ctx.host, &card, ctx.config.width, icon.as_ref()) {
+        Ok(path) => path,
         Err(error) => {
             ctx.error(&format!("whois: 卡片渲染失败（{domain}）: {error}"));
             ctx.messenger.try_send_text(
@@ -132,8 +134,8 @@ pub fn run(ctx: &Ctx, msg: Msg, arg: Option<String>) {
         }
     };
     ctx.info(&format!(
-        "whois: 卡片已生成 {} bytes（{} ms，{} 状态 / {} DNS）",
-        png.len(),
+        "whois: 卡片已生成 {}（{} ms，{} 状态 / {} DNS）",
+        path.display(),
         started.elapsed().as_millis(),
         card.domain_status.len(),
         card.name_server.len()
@@ -143,18 +145,20 @@ pub fn run(ctx: &Ctx, msg: Msg, arg: Option<String>) {
         return;
     }
 
-    let path = temp_path(msg);
-    if let Err(error) = std::fs::write(&path, &png) {
-        ctx.error(&format!(
-            "whois: 写临时文件失败 {}: {error}",
+    let sent = ctx.messenger.send_photo(msg.chat_id, &path, Some(msg.id));
+
+    // 产物在 html2img 的临时目录里，上传完成后就没用了；发完就删，别堆图。
+    // 删除失败只记日志（服务自己也会在 24 小时后清理）。
+    match std::fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => ctx.warn(&format!(
+            "whois: 删除渲染产物失败 {}: {error}",
             path.display()
-        ));
-        ctx.messenger
-            .try_send_text(msg.chat_id, "❌ 临时文件写入失败", Some(msg.id));
-        return;
+        )),
     }
 
-    match ctx.messenger.send_photo(msg.chat_id, &path, Some(msg.id)) {
+    match sent {
         Ok(sent) => ctx.info(&format!(
             "whois: 已发送 {domain} 卡片（chat={} message_id={}）",
             sent.chat_id, sent.message_id
@@ -168,18 +172,4 @@ pub fn run(ctx: &Ctx, msg: Msg, arg: Option<String>) {
             );
         }
     }
-
-    // 上传走的是本地文件，发完就删；失败也删，别在系统临时目录里堆图。
-    if let Err(error) = std::fs::remove_file(&path) {
-        ctx.warn(&format!(
-            "whois: 删除临时文件失败 {}: {error}",
-            path.display()
-        ));
-    }
-}
-
-/// 临时文件路径：每次命令一个，重名也不会互相覆盖。
-fn temp_path(msg: Msg) -> PathBuf {
-    let name = format!("fuyubot-whois-{}-{}.png", msg.chat_id, msg.id);
-    std::env::temp_dir().join(name)
 }

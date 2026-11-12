@@ -12,7 +12,8 @@
 //! IP 字面量与 `localhost` 这类主机名直接跳过，避免用户借 `/whois` 探测内网。
 //!
 //! 解码交给 `image` crate（ICO / PNG / GIF / WebP），拿到的是 RGBA8 像素；
-//! 长边超过 [`MAX_SIDE`] 的先缩小——卡片上只画 64px，留着原图只会让 data URI 变大。
+//! 长边超过 [`MAX_SIDE`] 的先缩小——卡片上只画 64px，而图标要 base64 进 HTML
+//! 交给 html2img（渲染服务单页上限 128 KiB），留着原图只会让 data URI 变大。
 //! SVG 图标直接跳过：`image` 解不了，硬塞给渲染层风险更大。
 
 use std::io::{Cursor, Read};
@@ -22,8 +23,11 @@ use crate::core::Config;
 
 /// 单次响应体上限：图标通常几 KB，512 KiB 足够，也挡住异常响应。
 const MAX_BYTES: u64 = 512 * 1024;
-/// 图标长边上限（px）。卡片上只画 64px，128 已经留了余量。
-const MAX_SIDE: u32 = 128;
+/// 图标长边上限（px）。
+///
+/// 卡片上只画 64px，所以缩到 64 就够：再大只会让 base64 变长，而 html2img 的
+/// 单页 HTML 上限是 128 KiB。
+const MAX_SIDE: u32 = 64;
 /// 原始图片长边上限：真实图标最大也就 512px，更大的当作解压炸弹丢掉。
 const MAX_SOURCE_SIDE: u32 = 1024;
 /// 图标边长下限：1×1 的跟踪像素画出来只是个色块，当作没有图标。

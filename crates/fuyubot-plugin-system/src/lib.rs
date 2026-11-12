@@ -1,15 +1,16 @@
 //! system：系统信息卡片插件（Rust）。
 //!
-//! 从 TS 版 `E:\\Fuyu_TDBot\\plugins\\system`（`index.ts` + `system.vue`）迁移而来，
-//! 渲染链路换成纯 Rust（借鉴 [hyper-render](https://github.com/thomasmost/hyper-render)
-//! 的 Blitz + Vello 方案），不再依赖 Node / Vue / satori / resvg / sharp。
+//! 从 TS 版 `E:\\Fuyu_TDBot\\plugins\\system`（`index.ts` + `system.vue`）迁移而来。
+//! 插件只把业务数据映射成 Vue 模板的 `data`（模板在 `assets/card.html`），渲染交给
+//! 宿主上的 `fuyubot.html2img` 服务（Vue 模板 + data → JPEG，纯 Rust，无 Chromium / Node），
+//! 不再依赖 Node / Vue / satori / resvg / sharp，也不再链接 hyper-render。
 //!
-//! 分层（与 whois / musiccard 的迁移版一致，任一层都能单独 `cargo test`）：
+//! 分层（任一层都能单独 `cargo test`）：
 //!
 //! - [`host`]：宿主适配层，只说「怎么和 fuyubot 通信」（消息、订阅、线程模型）；
 //! - [`cmd`]：命令层，`/system` 一条命令一个文件；
-//! - [`core`]：与宿主无关的能力（配置、系统信息采集、TDLib 查询、背景图、数据模型）；
-//! - [`render`]：图像生成，HTML 模板 → PNG → 背景/头像合成 → JPEG；
+//! - [`core`]：与宿主无关的能力（配置、系统信息采集、TDLib 查询、数据模型）；
+//! - [`render`]：图像生成，Vue 模板 + `data` → `fuyubot.html2img` → 本机图片文件；
 //! - [`help`]：`/help` 联动——把 `/system` 登记进内置帮助的命令表。
 //!
 //! 线程模型见 [`host`] 模块文档：宿主回调只投递，业务线程里才做阻塞操作。
@@ -73,6 +74,12 @@ impl Plugin for SystemPlugin {
         self.subscription = None;
         self.worker = None;
         self.host.info("system: 已停止");
+    }
+
+    /// 硬依赖渲染服务：没装 `fuyubot.html2img` 时插件停在 Pending，
+    /// 而不是启动后每条命令都渲染失败。
+    fn inject() -> Vec<String> {
+        vec![render::html2img::SERVICE.to_owned()]
     }
 
     /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/system` 登记进去；

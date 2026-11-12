@@ -1,7 +1,7 @@
 //! 收件箱与调度。
 //!
 //! 宿主回调只做一件事：把更新丢进 channel。剩下都在这里：识别文本命令，
-//! 为每条命令开一个线程跑完整流程（抓接口、下封面、渲染、发送）。
+//! 为每条命令开一个线程跑完整流程（抓接口、拼 HTML、调渲染服务、发送）。
 
 use std::ffi::{c_char, c_void};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -114,6 +114,8 @@ impl Drop for Worker {
 }
 
 /// 宿主回调：只投递，不做任何阻塞操作。
+// ABI 要求签名不能改成 `unsafe fn`（宿主按 C ABI 直接调用），安全边界在函数体内部。
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C-unwind" fn on_update(user: *mut c_void, payload: *const c_char) -> i32 {
     // SAFETY: 宿主按 ABI 约定传的是临时 NUL 结尾字符串。
     let update = unsafe { parse_payload(payload) };

@@ -6,7 +6,7 @@
 # 两者共用同一份源码，宿主只认 `plugin_*` 导出符号，不受 rlib 影响。
 [package]
 name = "fuyubot-plugin-whois"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
 description = "查询域名 Whois 信息，渲染成信息卡片并以照片回复"
@@ -18,11 +18,11 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 fuyubot-plugin-api.workspace = true
-hyper-render.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 ureq.workspace = true
-# 网站图标解码：ICO / PNG / GIF / WebP。版本与 hyper-render 依赖链里的 image 一致。
+# 网站图标解码：ICO / PNG / GIF / WebP。出图交给宿主的 fuyubot.html2img 服务
+# （见 src/render/html2img.rs），插件只把图标缩到 ≤64px 再编码成 PNG data URI。
 image = { workspace = true, features = ["ico", "png", "gif", "webp"] }
-# 把图标位图编码成 inline SVG `<image>` 的 data URI。
+# 把图标位图编码成 `<img src="data:image/png;base64,…">`。
 base64 = "0.22"

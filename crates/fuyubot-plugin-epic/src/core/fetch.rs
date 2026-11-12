@@ -1,7 +1,7 @@
 //! 阻塞式 HTTP 客户端。
 //!
 //! 业务线程本来就是独占的，没必要引 async runtime。这里的职责很窄：
-//! 建 agent（可选代理 / 超时 / UA）、取文本、取字节、把各种失败归一成 [`FetchError`]。
+//! 建 agent（可选代理 / 超时 / UA）、取文本、把各种失败归一成 [`FetchError`]。
 //!
 //! 响应体一律按「最多再读 1 字节」的方式限长：接口不一定带 `Content-Length`
 //! （chunked、gzip 压缩时都不可信），所以头部只能当提前拒绝的提示，
@@ -67,11 +67,6 @@ impl HttpClient {
         // Epic 接口固定 UTF-8；解不出来说明拿到的不是预期内容，宁可报错也别乱码入图。
         String::from_utf8(body)
             .map_err(|error| FetchError::Decode(format!("响应不是合法 UTF-8: {error}")))
-    }
-
-    /// GET 一段二进制（封面图）。
-    pub fn get_bytes(&self, url: &str, max_bytes: u64) -> Result<Vec<u8>, FetchError> {
-        self.request(url, max_bytes)
     }
 
     /// 发 GET 并读出受限于 `max_bytes` 的响应体。

@@ -4,20 +4,48 @@ TS 版 `E:\Fuyu_TDBot\plugins\system`（`index.ts` + `system.vue`，Vue + satori
 的 Rust 迁移版：
 
 `/system` → 采集宿主机的 CPU / 内存 / 磁盘 → 查询 TDLib 版本、机器人资料、
-管理员资料与已加载插件 → 渲染成一张信息卡片 → 以照片回复命令消息 → 删除临时文件。
+管理员资料与已加载插件 → 渲染成一张 1400×800 的信息卡片 → 以照片回复命令消息 → 删除渲染产物。
 
-图像生成从 `Vue + satori + resvg + sharp`（Node 侧 `genImg.ts`）换成
-[hyper-render](https://github.com/thomasmost/hyper-render) 的纯 Rust 方案：
-「HTML + CSS → Blitz（Stylo + Taffy）布局 → Vello CPU 光栅化 → PNG」，
-再把 HTML 透明层、渐变/图片背景、圆形头像用 `image` 合成成 JPEG，
-**不需要 Node、不需要浏览器、不需要外部截图服务**，整个插件就是一个动态库。
+图像生成不再由插件自己完成：界面在 `assets/card.html`（`<style>` + Vue 模板，正文来自
+TS 版 `system.vue`），Rust 只把业务数据映射成模板的 `data`，渲染交给宿主上的
+[`fuyubot.html2img`](https://github.com/xiaoqvan/fuyubot-plugins/tree/main/crates/fuyubot-plugin-html2img)
+插件（服务名 `fuyubot.html2img`，方法 `render`，`vue: true`）。渲染器是 hyper-render 的
+本地 fork（Blitz + Stylo + Taffy + Vello CPU），**纯 Rust、无 Chromium / Node**，但只存在于
+html2img 插件里，本插件不再链接渲染引擎，也不再下载 / 合成任何位图（头像除外，见下）。
+
+## 依赖
+
+- **必须安装 `fuyubot.html2img` 插件**：本插件用 `Plugin::inject` 声明了硬依赖，
+  宿主会在服务就绪后再启动 system；没装时插件停在 Pending（不静默失败）。
+- 卡片头像缩到 ≤192px 后内嵌为 `data:image/jpeg;base64,…`，由 html2img 加载；
+  背景图是一条**公网 URL**，同样由 html2img 拉取，本进程不下载、不缓存。
+- `fuyubot.help` 仍是软依赖（`soft_inject`）：没有也照常启动，只影响 `/help` 登记。
 
 ## 预览
 
-| 文件 | 说明 |
-| --- | --- |
-| `card-sample.jpg` | 离线样张（合成背景 + 合成头像，不联网） |
-| `card-real.jpg` | 真实背景图 + 真实照片头像（`examples/render_real.rs` 联网出图） |
+样张不再提交二进制图片，而是生成 **html2img 请求 JSON**（`{html, vue: true, data, …}`）
+与单独的 `data` JSON：
+
+```bash
+cargo run -p fuyubot-plugin-system --example render_card_system   # → target/qa/json/card-sample*.json + target/qa/data/card-sample*.json（5 份）
+cargo run -p fuyubot-plugin-system --example render_real   # → 带默认公网背景的 card-real.json
+```
+
+请求 JSON 交给装好 `fuyubot.html2img` 的宿主 / 调试环境即可出图；`target/qa/data/*.json`
+可以喂给本地模板校验器（编译 + 渲染，不依赖 html2img）：
+
+```bash
+cd target/vuecheck
+cargo run --quiet -- ../../crates/fuyubot-plugin-system/assets/card.html ../qa/data/card-sample.json ../qa/html/card-sample.html
+# OK 30446 bytes
+```
+
+模板在 `assets/card.html`：`<style>` 是 reset + UnoCSS 预生成的工具类
+（`target/unocss-gen/out/system.css`），后面是 Vue 模板正文。改了类名要重新生成 CSS：
+
+```bash
+cd target/unocss-gen && node gen.mjs E:/Fuyu_TDBot/plugins/system/system.vue
+```
 
 ## 功能
 
@@ -28,11 +56,11 @@ TS 版 `E:\Fuyu_TDBot\plugins\system`（`index.ts` + `system.vue`，Vue + satori
   - CPU / RAM 使用率进度条（`sysinfo`，CPU 两次采样；SWAP 按需求去掉）；
   - 磁盘占用（Windows 盘符「磁盘C」；Linux 是「根目录」/挂载点、macOS 是卷名、
     Android 是「内部存储」/「外部存储」；已用 / 总量、百分比，最多 4 块）；
-  - 宿主进程里已加载的插件胶囊（名字 + 运行状态），行数与面板高度**随右列剩余空间
-    自适应**，常见数量（6–20 个）会全部画出，只有真的放不下才折成 `+N`；
-- 所有外部依赖失败都**降级不炸**：TDLib 查询失败显示「未知」，头像拿不到画占位图，
-  背景图下载失败退回渐变，插件清单读不到显示「暂无数据」。
-- 临时 JPEG 在发送完成后自动删除；采集、下载、渲染都在独立业务线程里跑，不阻塞 TDLib。
+  - 宿主进程里已加载的插件胶囊（名字 + 运行状态），按 `flex-wrap` 在面板里自动换行，
+    最多画 12 枚、超出的折成 `+N`，底部显示「共 N 个插件」；
+- 所有外部依赖失败都**降级不炸**：TDLib 查询失败显示「未知」，头像拿不到画渐变占位，
+  背景 URL 不是公网地址 / 拉取失败时只留渐变，插件清单读不到显示「暂无数据」。
+- html2img 的渲染产物在发送完成后自动删除；采集、渲染都在独立业务线程里跑，不阻塞 TDLib。
 
 ## 与 `/help` 的联动
 
@@ -65,9 +93,11 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
    > 那条通知会漏掉（宿主自带的 `download_file` 操作也漏了 `priority` / `synchronous`，
    > 实测会被 TDLib 直接拒绝）。
 6. `list_plugins()` 读宿主进程里的插件清单（名字 + active/pending/failed 状态）。
-7. 下载背景图（可缓存到系统临时目录；失败退回渐变）。
-8. hyper-render 渲染 HTML 版面 → `image` 合成背景 / 圆头像 → JPEG。
-9. 写入系统临时目录，以照片回复触发消息，然后删除临时文件。
+7. 头像字节缩到 ≤192px、JPEG q80 后转 `data:` URI；背景只保留公网 `http(s)` URL；
+   卡片数据按模板契约映射成 `data`（`bot` / `admin` / `tblib` / `system` / `plugins` / `background`）。
+8. `host.call_service("fuyubot.html2img", "render", …)` 带上 `assets/card.html` 模板、
+   `vue: true` 与 `data`，渲染 1400×800 JPEG（`auto_height = false`、`scale = 1.0`、`format = "jpg"`）。
+9. 拿到本机 `path` → `send_photo` → 删除该文件（NotFound 不算错误）。
 
 ## 项目结构
 
@@ -76,14 +106,15 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
 | `src/lib.rs` | 插件入口：实现 `Plugin`，建 worker、订阅 `updateNewMessage`、停机清理 |
 | `src/host/` | 宿主适配层：channel 路由线程、simplify 消息网关（发文本 / 发照片） |
 | `src/cmd/` | 命令层：文本命令解析、`/system` 业务流程 |
-| `src/core/` | 与宿主无关：配置、系统信息采集、TDLib 查询、背景图、数据模型 |
-| `src/render/` | hyper-render 卡片：HTML 模板、背景/头像合成、JPEG 输出 |
-| `examples/` | 离线样张出图，调样式与验收用 |
+| `src/core/` | 与宿主无关：配置、系统信息采集、TDLib 查询、数据模型 |
+| `assets/card.html` | 卡片界面：`<style>`（reset + UnoCSS 工具类）+ Vue 模板 |
+| `src/render/` | `view_data` 数据映射、头像 data URI、html2img 客户端、离线样张 |
+| `examples/` | 生成 html2img 请求 JSON 与 data JSON（`target/qa/json`、`target/qa/data`），调样式与验收用 |
 | `testdata/` | 离线回放用最小配置与 `/system` 更新样例 |
 | `plugin.json` | 插件元信息（native / ABI 6） |
 
-分层原则：`host` 只谈宿主通信，`cmd` 只谈命令，`core` 只谈数据与网络，
-`render` 只谈版面；任一层都可以单独 `cargo test`。
+分层原则：`host` 只谈宿主通信，`cmd` 只谈命令，`core` 只谈数据，
+`render` 只谈数据映射与渲染服务调用；任一层都可以单独 `cargo test`。
 
 ## 构建与部署
 
@@ -116,39 +147,47 @@ plugins/system/system.dll
 [plugin.system]
 super_admin      = 123456789   # 超级管理员 user id；不配则 admin 一栏显示「未配置」
 background_url   = "https://i0.hdslb.com/bfs/article/cc4a3e435ac47a6190aebf4f74a8675b88a183bb.jpg"
-background_cache = true        # 背景图下载后缓存到系统临时目录
 timeout_ms       = 5000        # 单次 TDLib 调用超时
 avatar_timeout_ms = 20000      # 头像同步下载的超时（弱网 / 大图给足时间）
 # prefixes       = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
 ```
 
-`background_url = ""` 可以关掉背景图（纯渐变，离线环境推荐）。
-旧写法的大写键（`SUPER_ADMIN`、`BACKGROUND_URL`、`TIMEOUT_MS` 等）同样接受。
+`background_url = ""` 可以关掉背景图（纯渐变，离线环境推荐）。背景图**不再下载 / 缓存**：
+URL 写进模板 `data`，由 html2img 拉取；不是公网 `http(s)`（比如 `file://`、局域网地址）
+时直接丢弃，卡片只剩渐变——这是可接受的降级。
+
+旧写法的大写键（`SUPER_ADMIN`、`BACKGROUND_URL`、`TIMEOUT_MS` 等）同样接受；
+`background_cache` 已随下载逻辑一起删除，写了也不会生效。
 
 ## 与 TS 版的差异
 
 | | TS 版 | Rust 版 |
 |---|---|---|
 | 运行形态 | `plugins/system/index.ts`（Node 插件） | 单个 `system.dll`（宿主 dlopen） |
-| 模板 | `system.vue`（Vue 运行时 + `<script setup>`） | `src/render/template.rs` 生成的静态 HTML |
-| 渲染 | `satoriVue` → SVG → `@resvg/resvg-js` → `sharp` | hyper-render：Blitz 布局 → Vello CPU → PNG → image 合成 JPEG |
-| 图片 | `<img>` / 背景图直接交给 satori | hyper-render 不加载 `<img>`，头像与背景由 `image` 在 Rust 侧合成 |
-| 字体 | 仓库内 Noto Sans SC + 系统回退 | 只用系统字体（hyper-render 0.2 不支持 `@font-face`） |
+| 模板 | `system.vue`（Vue 运行时 + `<script setup>`） | `assets/card.html`（`<style>` + Vue 模板，html2img 编译） |
+| 渲染 | `satoriVue` → SVG → `@resvg/resvg-js` → `sharp` | 宿主服务 `fuyubot.html2img`（HTML/CSS → JPEG） |
+| 图片 | `<img>` / 背景图直接交给 satori | 头像是 `data:` URI、背景是公网 URL，都由 html2img 加载 |
+| 字体 | 仓库内 Noto Sans SC + 系统回退 | 只用系统字体（html2img 不随插件带字体） |
 | 系统信息 | `systeminformation` | `sysinfo`（CPU / 内存 / 磁盘；不取 SWAP、OS、主板、网络） |
 | 管理员 | TS 版 `configs.admin.super_admin`（数据库） | `[plugin.system] super_admin`（宿主配置；Rust 宿主没有 admin 数据库段） |
 | 插件清单 | `pluginManager.getPlugins()`（含版本） | 宿主 `list_plugins`（只有名字 + 状态，ABI 没有版本字段） |
 | 失败策略 | 任意一步失败 → 整条命令回「获取系统信息失败」 | TDLib / 头像 / 背景各自降级，只有渲染失败才回错误 |
 | 命令注册 | `cmdHandlers` | 文本命令解析（`/system`，前缀见上文） |
-| 输出 | PNG（`quality: 1.5`） | JPEG 1400×800（quality 90，Telegram 照片更省流量） |
+| 输出 | PNG（`quality: 1.5`） | JPEG 1400×800（`scale = 1.0`，Telegram 照片更省流量） |
 
 ## 测试
 
 ```bash
 cd crates/fuyubot-plugin-system
-cargo test --offline --release                         # 单元测试：配置 / 系统信息 / TDLib 解析 / 命令解析 / 渲染
-cargo run --offline --release --example render_card    # 内置样例出图（5 张，不联网）
-cargo run --offline --release --example render_real    # 真实背景 + 真实照片头像（联网）
+cargo test                         # 单元测试
+cargo run -p fuyubot-plugin-system --example render_card_system    # 请求 JSON + data 写到 target/qa/{json,data}/
+cargo run -p fuyubot-plugin-system --example render_real    # 带默认公网背景的请求 JSON
 ```
+
+- 单元测试（`src/**`）：配置解析、系统信息格式、TDLib JSON 解析、命令解析。
+- 模板本身用 `target/vuecheck` 校验（编译 + 渲染，不依赖 html2img）：
+  `cargo run --quiet -- ../../crates/fuyubot-plugin-system/assets/card.html <data.json> <out.html>`。
+- 本地没有 html2img 渲染器，测试**不断言图片字节**；真实出图由宿主上的 html2img 插件验收。
 
 离线回放（不接 TDLib、不用账号，验证插件加载与 `/system` 命令链路）：
 
@@ -164,14 +203,22 @@ cd <fuyubot 发行目录>
 
 ## 已知限制
 
-- hyper-render 只认系统字体，中文依赖系统 CJK 字体（Windows 上是微软雅黑）。
-- `@font-face`、外部图片加载未支持；背景与头像所以在 Rust 侧合成。
+- html2img 用 vue-template-html 编译模板：**不执行 JavaScript**，表达式只支持变量 /
+  成员访问 / 三元 / 四则与比较，没有函数调用、`Math` / `Date`、`?.` / `??`；
+  需要计算的值在 Rust 的 `view_data` 里先算好。
+- html2img **只加载公网 `http(s)` 与 `data:` 图片**（`file://`、相对路径、私网 / 回环
+  地址都会被拒绝）；背景 URL 不是公网地址时本插件直接不写这张图，只留渐变。
+- html2img 默认限制单次 HTML ≤ 128 KiB：头像已缩到 ≤192px（JPEG q80），整页通常
+  25–40 KiB（内置样张 8–30 KiB）；模板本身在发请求前会检查上限，超了直接报错。
+- 只认系统字体：中文依赖系统 CJK 字体（Windows 上是微软雅黑），观感与 TS 版的
+  Noto Sans SC 略有差别。
 - 磁盘按平台取标签：Windows 是盘符（「磁盘C」），Linux 是 `根目录` / 挂载点，
   macOS 是 `系统磁盘` / 卷名，Android 是 `内部存储` / `外部存储`；伪文件系统
   （proc / sysfs / tmpfs / 快照）与 Android 只读系统镜像不会占位，最多 4 块。
-- 插件胶囊没有版本号：宿主 `list_plugins` 只暴露名字与状态。
-- 后台图默认来自 TS 版 `system.vue` 里的 B 站图片；离线环境请配置
-  `background_url = ""` 或预先把缓存文件放到系统临时目录。
+- 插件胶囊没有版本号：宿主 `list_plugins` 只暴露名字与状态；模板沿用原 `version`
+  位置显示状态（运行 / 等待 / 失败）。
+- 插件胶囊最多画 12 枚（面板高度固定、不做坐标排版），超出的折成 `+N`；限额在
+  `view_data` 里做（`MAX_PLUGIN_CHIPS`），模板只负责显示 `plugin_overflow`。
 
 ## 许可
 

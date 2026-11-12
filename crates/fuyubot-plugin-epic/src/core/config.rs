@@ -12,7 +12,6 @@
 //! user_agent = "Mozilla/5.0 …"        # 请求 UA
 //! proxy = ""                          # 形如 http://127.0.0.1:7890，留空直连
 //! timeout_ms = 20000                  # 单次 HTTP 超时
-//! cache_dir = "cache"                 # 渲染产物临时目录
 //! scale = 2.0                         # 输出缩放（2.0 = 2 倍图）
 //! max_per_row = 4                     # 每行卡片数
 //! max_cards = 8                       # 一张图最多展示的游戏数
@@ -21,7 +20,6 @@
 //! caption = ""                        # 图片说明，留空则不带说明
 //! ```
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use fuyubot_plugin_api::{HostApi, HostExt};
@@ -52,8 +50,6 @@ pub struct Config {
     pub proxy: Option<String>,
     /// 单次 HTTP 超时。
     pub timeout: Duration,
-    /// 渲染产物临时目录。
-    pub cache_dir: PathBuf,
     /// 命令前缀。
     pub prefixes: Vec<String>,
     /// 输出缩放倍数。
@@ -81,9 +77,6 @@ impl Default for Config {
             timezone_offset_hours: 8,
             proxy: None,
             timeout: Duration::from_millis(20_000),
-            cache_dir: std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join("cache"),
             prefixes: DEFAULT_PREFIXES.iter().map(|p| (*p).to_owned()).collect(),
             scale: 2.0,
             max_per_row: 4,
@@ -123,11 +116,8 @@ impl Config {
         if let Some(ms) = number(&section, &["timeout_ms", "TIMEOUT_MS"]) {
             config.timeout = Duration::from_millis((ms as u64).max(1_000));
         }
-        if let Some(dir) = text(&section, &["cache_dir", "CACHE_DIR"]) {
-            config.cache_dir = PathBuf::from(dir);
-        }
         if let Some(scale) = number(&section, &["scale", "SCALE"]) {
-            config.scale = (scale as f32).clamp(0.5, 4.0);
+            config.scale = (scale as f32).clamp(0.5, 3.0);
         }
         if let Some(n) = number(&section, &["max_per_row", "MAX_PER_ROW"]) {
             config.max_per_row = (n as u32).clamp(1, 8);

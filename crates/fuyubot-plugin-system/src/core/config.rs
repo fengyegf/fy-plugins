@@ -5,8 +5,7 @@
 //! ```toml
 //! [plugin.system]
 //! super_admin   = 123456789      # 超级管理员 user id；不配就没有 admin 卡片
-//! background_url = "https://…"   # 卡片背景图；留空 = 纯渐变
-//! background_cache = true        # 背景图下载后缓存到系统临时目录
+//! background_url = "https://…"   # 卡片背景图（公网 URL，由 html2img 拉取）；留空 = 纯渐变
 //! timeout_ms     = 5000          # 单次 TDLib 调用超时
 //! prefixes       = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
 //! ```
@@ -22,7 +21,7 @@ use serde_json::Value;
 /// 插件段名：`[plugin.system]`。
 pub const PLUGIN_NAME: &str = "system";
 
-/// TS 版 `system.vue` 里写死的背景图；默认沿用它，下载失败就退回渐变。
+/// TS 版 `system.vue` 里写死的背景图；默认沿用它，作为公网 URL 直接写进 HTML。
 pub const DEFAULT_BACKGROUND_URL: &str =
     "https://i0.hdslb.com/bfs/article/cc4a3e435ac47a6190aebf4f74a8675b88a183bb.jpg";
 
@@ -41,10 +40,10 @@ const DEFAULT_AVATAR_TIMEOUT: Duration = Duration::from_secs(20);
 pub struct Config {
     /// 超级管理员 user id；`None` = 卡片里的 admin 一栏显示「未配置」。
     pub super_admin: Option<i64>,
-    /// 背景图 URL；`None` = 不下载，纯渐变背景。
+    /// 背景图 URL（公网 `http(s)`）；`None` = 纯渐变背景。
+    ///
+    /// 不再下载 / 缓存：URL 直接写进卡片 HTML，由 `fuyubot.html2img` 加载。
     pub background_url: Option<String>,
-    /// 背景图是否缓存到系统临时目录（默认开）。
-    pub background_cache: bool,
     /// 单次 TDLib 调用（等 `response` 通道）的超时。
     pub td_timeout: Duration,
     /// 头像下载超时（同步 `downloadFile` 的等待预算）。
@@ -58,7 +57,6 @@ impl Default for Config {
         Self {
             super_admin: None,
             background_url: Some(DEFAULT_BACKGROUND_URL.to_owned()),
-            background_cache: true,
             td_timeout: DEFAULT_TIMEOUT,
             avatar_timeout: DEFAULT_AVATAR_TIMEOUT,
             prefixes: DEFAULT_PREFIXES.iter().map(|p| (*p).to_owned()).collect(),
@@ -124,13 +122,6 @@ impl Config {
         if let Some(url) = string(section, &["background_url", "BACKGROUND_URL"]) {
             let url = url.trim();
             self.background_url = (!url.is_empty()).then(|| url.to_owned());
-        }
-        if let Some(cache) = section
-            .get("background_cache")
-            .or_else(|| section.get("BACKGROUND_CACHE"))
-            .and_then(Value::as_bool)
-        {
-            self.background_cache = cache;
         }
         // 兼容两种写法：timeout_ms（毫秒）优先，其次 timeout（秒）。
         if let Some(ms) = number(section, &["timeout_ms", "TIMEOUT_MS"]) {
@@ -204,7 +195,6 @@ mod tests {
         config.apply(&json!({
             "super_admin": 123456789,
             "background_url": "https://example.com/bg.jpg",
-            "background_cache": false,
             "timeout_ms": 2500,
             "avatar_timeout_ms": 15000,
             "prefixes": ["/", "系统!"],
@@ -214,7 +204,6 @@ mod tests {
             config.background_url.as_deref(),
             Some("https://example.com/bg.jpg")
         );
-        assert!(!config.background_cache);
         assert_eq!(config.td_timeout, Duration::from_millis(2500));
         assert_eq!(config.avatar_timeout, Duration::from_millis(15000));
         assert_eq!(config.prefixes, vec!["/".to_owned(), "系统!".to_owned()]);

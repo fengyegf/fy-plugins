@@ -18,7 +18,7 @@ const COMMAND_NAME: &str = "musiccard";
 
 /// 一条待执行的任务。
 pub enum Job {
-    /// 取歌 → 取封面 → 选歌词 → 渲染 → 发照片。
+    /// 取歌 → 选歌词 → 渲染（html2img 服务）→ 发照片。
     MusicCard {
         msg: Msg,
         /// 参数按空格拼回一整串（关键词可以带空格）。

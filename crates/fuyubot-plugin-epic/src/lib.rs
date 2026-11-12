@@ -1,20 +1,26 @@
 //! epic：Epic 免费游戏卡片（Rust 版）。
 //!
-//! 处理链路：抓 Epic 商店促销接口 → 筛出「当前免费 / 即将免费」→
-//! 用 hyper-render 渲染成卡片图 → 以照片回复命令消息。
+//! 处理链路：抓 Epic 商店促销接口 → 筛出「当前免费 / 即将免费」→ 整理成 Vue 模板的
+//! `data` 交给宿主上的 `fuyubot.html2img` 服务渲染成卡片图 → 以照片回复命令消息。
+//!
+//! 界面不在 Rust 里拼：卡片版式、循环与条件都在 `assets/card.html`（Vue 模板 +
+//! 内联 CSS）里，插件只给数据。渲染器（hyper-render 的本地 fork）只存在于 html2img
+//! 插件里，本插件不链接渲染引擎，也不下载 / 合成封面。
 //!
 //! 分层：
 //! - [`core`]：配置、HTTP、Epic 接口与数据模型（不碰宿主）；
-//! - [`render`]：HTML/CSS 模板 + hyper-render 渲染 + 封面合成（不碰宿主）；
+//! - [`render`]：Vue 模板数据映射 + `fuyubot.html2img` 服务客户端（不碰宿主）；
 //! - [`host`]：宿主适配（订阅、消息发送、线程调度）；
 //! - [`cmd`]：命令层（`/epic` 一个命令一个文件）；
 //! - [`help`]：`/help` 联动——把 `/epic` 登记进内置帮助的命令表。
 
-mod cmd;
-mod core;
-mod help;
-mod host;
-mod render;
+// 模块一律 `pub`：crate 额外编了 rlib，`cargo test` / `examples/` 才能直接调内部模块。
+// 这不影响宿主加载 cdylib —— 宿主只找 `plugin_*` 那几个导出符号。
+pub mod cmd;
+pub mod core;
+pub mod help;
+pub mod host;
+pub mod render;
 
 use fuyubot_plugin_api::{HostApi, HostExt, Plugin, Subscription, define_plugin};
 
@@ -62,6 +68,12 @@ impl Plugin for Epic {
         self.subscription = None;
         self.worker = None;
         self.host.info("epic: 已停止");
+    }
+
+    /// 硬依赖渲染服务：没装 `fuyubot.html2img` 时插件停在 Pending，
+    /// 而不是启动后每条命令都渲染失败。
+    fn inject() -> Vec<String> {
+        vec![render::html2img::SERVICE.to_owned()]
     }
 
     /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/epic` 登记进去；

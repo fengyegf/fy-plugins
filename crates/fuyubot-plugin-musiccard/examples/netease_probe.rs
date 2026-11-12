@@ -1,6 +1,6 @@
-//! 真网络探针：把 `get_song` / `fetch_cover` / `select_lyrics` 走一遍。
+//! 真网络探针：把 get_song / select_lyrics 走一遍。
 //!
-//! 用法（在 `plugins/musiccard` 下）：
+//! 用法（在 crates/fuyubot-plugin-musiccard 下）：
 //!
 //! ```powershell
 //! cargo run --example netease_probe                  # 默认搜"晴天"
@@ -9,27 +9,12 @@
 //! cargo run --example netease_probe -- "https://music.163.com/song?id=347230"
 //! ```
 //!
-//! 只读探针：不写文件、不改任何状态，失败时进程退出码为 1。
-//!
-//! 注意：`src/lib.rs` 里的模块目前是私有的（便于宿主内部使用），
-//! 所以示例用 `#[path]` 把需要的模块直接编进自己的 crate root，
-//! 这样示例不需要等 lib 把模块改成 `pub`。
-//!
-//! 本机实测（2026-11-04，网络可用）：
-//! - 关键词 `晴天` → "晴天 (原唱 周杰伦)" / RyaVocal（ID 2668397359），
-//!   JPEG 封面 210851 字节，选出 5 行歌词（cloudsearch 第一条是翻唱，与旧版一致）；
-//! - `347230` 与 `https://music.163.com/song?id=347230` → "海阔天空" / Beyond，
-//!   JPEG 封面 110314 字节，选出 5 行歌词；
-//! - `536622304` → "Lemon" / 米津玄師，日文原文 + 中文译文按时间对齐，5 行都有译文。
-
-#[path = "../src/model.rs"]
-mod model;
-#[path = "../src/netease/mod.rs"]
-mod netease;
-#[path = "../src/util/mod.rs"]
-mod util;
+//! 只读探针：不下载封面、不写文件、不改任何状态，失败时进程退出码为 1。
+//! 封面只打印公网 URL——真正拉图由 html2img 服务完成。
 
 use std::process::ExitCode;
+
+use musiccard::netease;
 
 fn main() -> ExitCode {
     let input = std::env::args().nth(1).unwrap_or_else(|| "晴天".to_owned());
@@ -69,18 +54,6 @@ fn main() -> ExitCode {
         }
     }
 
-    let cover = match netease::fetch_cover(&song.cover_url) {
-        Ok(bytes) => bytes,
-        Err(error) => {
-            eprintln!("\n下载封面失败：{error}");
-            return ExitCode::FAILURE;
-        }
-    };
-    println!("\n== 封面 ==");
-    println!("字节数：{}", cover.len());
-    println!("前 16 字节：{}", hex_prefix(&cover, 16));
-    println!("判定格式：{}", sniff_format(&cover));
-
     let raw_lines = song
         .lyric
         .split('\n')
@@ -104,26 +77,4 @@ fn main() -> ExitCode {
 
     println!("\n探针跑通。");
     ExitCode::SUCCESS
-}
-
-fn hex_prefix(bytes: &[u8], take: usize) -> String {
-    bytes
-        .iter()
-        .take(take)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// 光看魔数就知道封面是不是真图片。
-fn sniff_format(bytes: &[u8]) -> &'static str {
-    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
-        "JPEG"
-    } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        "PNG"
-    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(&b"WEBP"[..]) {
-        "WebP"
-    } else {
-        "未知（可能不是图片）"
-    }
 }

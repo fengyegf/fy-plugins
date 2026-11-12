@@ -2,7 +2,6 @@
 //!
 //! 这一层不订阅更新、不发消息，只做「取数据」；命令层负责把它们拼成 [`model::CardData`]。
 
-pub mod background;
 pub mod config;
 pub mod model;
 pub mod sysinfo;

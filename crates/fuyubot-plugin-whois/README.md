@@ -1,9 +1,11 @@
 # Whois 插件
 
 基于 FuyuBot SDK Native ABI v6 的域名 Whois 查询插件。用户发送命令后，插件查询
-域名注册信息与服务器 IP 归属，在本地渲染为 PNG 信息卡片，并以照片回复触发消息。
+域名注册信息与服务器 IP 归属，把数据交给 `assets/card.html` 里的 Vue 卡片模板，
+再由宿主上的 `fuyubot.html2img` 服务渲染成 JPEG 卡片，并以照片回复触发消息。
 
-整个运行链路使用 Rust 实现，不依赖 Node、浏览器或外部截图服务。
+整个运行链路使用 Rust 实现，不依赖 Node、浏览器或外部截图服务；渲染器只在宿主
+一侧（html2img 插件）存在，本插件不再链接渲染引擎。
 
 ## 功能
 
@@ -14,8 +16,9 @@
 - 未注册域名直接回复文本，不生成空卡片。
 - Whois 接口返回明确错误时，将原因回复给用户。
 - IP 归属查询失败时保留主体卡片，并使用已有数据或占位值兜底。
-- 查询、渲染和发送均在独立业务线程中执行，不阻塞 TDLib 回调线程。
-- 临时图片发送完成后立即删除。
+- 查询、渲染和发送均在独立业务线程中执行（`html2img` 调用是阻塞的），不阻塞
+  TDLib 回调线程。
+- `html2img` 产出的临时图片发送完成后立即删除。
 
 ## 与 `/help` 的联动
 
@@ -25,6 +28,39 @@
 依赖用 `soft_inject` 声明（写的是服务名，不是插件名）：有 help 就排在它后面，
 没有也照常启动——登记失败只记一条 warn，不影响 `/whois` 本身。服务名、方法名与
 JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
+
+## 渲染链路
+
+界面不在 Rust 里拼：整张卡片（HTML / CSS / 循环 / 条件 / 插值）都在
+`assets/card.html`（`<style>` + Vue 模板）。插件只把 `CardData` 映射成模板的
+`data`，交给宿主上的
+[`fuyubot.html2img`](https://github.com/xiaoqvan/fuyubot-plugins/tree/main/crates/fuyubot-plugin-html2img)
+插件的 `render` 方法（`vue: true`），拿回本机图片路径后以照片发送，发完即删。
+
+依赖用 `inject` 声明为**硬依赖**（写的是服务名 `fuyubot.html2img`，不是插件名）：
+没装 html2img 时本插件停在 Pending，比启动后每条命令都渲染失败更容易排查。
+
+交给服务的入参：
+
+| 字段 | 值 | 说明 |
+| --- | --- | --- |
+| `html` | `assets/card.html` | `<style>` + Vue 模板，编译期嵌入 |
+| `vue` | `true` | 按 Vue 模板编译，用 `data` 渲染 |
+| `data` | `view_data()` 的结果 | 模板字段 + 派生值（`creation_years` / `ip_location` / `icon`） |
+| `width` | 配置的卡片宽度，夹到 `900`–`1600` | 两列信息框的版面下限 |
+| `height` | `200` | `auto_height` 时只是下限，避免短卡片被默认视口撑出留白 |
+| `auto_height` | `true` | 高度按内容撑开 |
+| `scale` | `1.0` | 1:1 输出，与原本地渲染一致 |
+| `format` | `jpg` | 白底卡片，JPEG 体积小、Telegram 上传够用 |
+
+模板表达式受 vue-template-html 限制（没有 JS 运行时）：不能调用函数，也不能用
+`Math` / `Date` / `?.` / `??`。`Math.floor(creation_days / 365)` 这类结果先在
+Rust 里算好（`creation_years`），模板只读字段；HTML 转义由渲染器负责，Rust 不再
+自己拼 HTML，也不再自己转义。
+
+图片只有两种来源，都符合 html2img 的限制：网站图标是 `<img src="data:image/png;base64,…">`
+（先在 `core/favicon` 里缩到 ≤64px 再编码 PNG，整页 HTML 控制在 128 KiB 以内），
+其余图形是模板里的内联 SVG。服务调用是同步阻塞的，只在业务线程里发生。
 
 ## 使用
 
@@ -50,8 +86,9 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
 4. 未注册时回复文本并结束。
 5. 查询服务器 IP 归属；失败时读取 Whois 数据中的同名字段兜底。
 6. 抓取网站图标：`/favicon.ico` → `www.` 前缀 → 首页声明的图标；失败则用内置图标。
-7. 合并数据并渲染 PNG 信息卡片。
-8. 写入系统临时目录，发送照片，再删除临时文件。
+7. 合并数据，映射成 Vue 模板的 `data`（派生 `creation_years` / `ip_location` / 图标 data URI）。
+8. 调 `fuyubot.html2img` 的 `render` 出图（宽度取配置、高度自适应、JPEG）。
+9. 发送照片，再删除服务产出的临时文件。
 
 ## 项目结构
 
@@ -61,7 +98,8 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
 | `src/host/` | 宿主通信、TDLib 消息解析和消息网关 |
 | `src/cmd/` | 命令解析、任务分发与 `/whois` 业务 |
 | `src/core/` | 配置、接口请求、域名清洗和数据模型 |
-| `src/render/` | HTML 模板、内联素材和 PNG 渲染 |
+| `src/render/` | Vue 卡片模板嵌入、图标 data URI 与 `fuyubot.html2img` 服务客户端 |
+| `assets/card.html` | 卡片界面：`<style>`（reset + UnoCSS 工具类）+ Vue 模板 |
 | `plugin.json` | 插件元信息与 ABI 声明 |
 
 模块职责保持单向：`host` 负责宿主通信，`cmd` 负责任务编排，`core` 负责数据与网络，
@@ -175,6 +213,8 @@ prefixes      = ["/", "!", "！", ".", "#"]
 ## 运行行为
 
 - 卡片宽度低于 `900px` 时两列信息会过度挤压，因此由插件自动夹取到允许范围。
+- 渲染依赖宿主上的 `fuyubot.html2img` 插件（硬依赖）：没装时本插件停留在 Pending；
+  服务不可用、HTML 超限或渲染报错时，命令回复失败提示而不是崩掉。
 - 网站图标只从目标站点自己取（`/favicon.ico`、`www.` 前缀、首页 `<link rel="icon">`），
   不经过第三方图标服务；站点不可达、返回 403 或没有图标时，卡片回退到内置的渐变地球图标。
 - 图标抓取有独立预算，最多让 `/whois` 多等 `favicon_timeout_ms`（缺省 6 秒）；IP 字面量

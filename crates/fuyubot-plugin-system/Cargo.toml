@@ -18,17 +18,11 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 fuyubot-plugin-api.workspace = true
-hyper-render.workspace = true
-# 背景 / 头像的位图合成：解码、缩放、圆角、JPEG 编码。
+# 头像：解码 TDLib 给的照片（jpeg / png），缩到 ≤192px 再编码 JPEG。
 image = { workspace = true, features = ["jpeg", "png"] }
+# 把缩小后的头像 JPEG 编成 `data:image/jpeg;base64,…`（html2img 加载 data URI）。
+base64 = "0.22"
 # 系统信息：CPU / 内存 / SWAP / 磁盘。只要 system + disk，不拖 network / component。
 sysinfo = { version = "0.31", default-features = false, features = ["system", "disk", "multithread"] }
 serde_json.workspace = true
 thiserror.workspace = true
-ureq.workspace = true
-
-[lints.clippy]
-# `Template::text` 的 left/top/width/height 本来就是平铺的版面参数，拆结构体只会更绕。
-too_many_arguments = "allow"
-# layout 的单元测试断言的是常量版面关系（不重叠、不溢出），常量断言是刻意的。
-assertions_on_constants = "allow"

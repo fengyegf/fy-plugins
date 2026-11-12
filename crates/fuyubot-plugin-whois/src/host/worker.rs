@@ -18,7 +18,7 @@ use crate::host::Ctx;
 
 /// 空闲时的轮询间隔（用于观察停机标志）。
 const IDLE_TICK: Duration = Duration::from_millis(200);
-/// 业务线程栈：HTTP + Blitz 布局 + Vello 光栅化都在这里跑，给足 2 MiB。
+/// 业务线程栈：HTTP + html2img 渲染调用 + 上传都在这里跑，给足 2 MiB。
 const TASK_STACK: usize = 2 * 1024 * 1024;
 
 /// 一条命令消息。

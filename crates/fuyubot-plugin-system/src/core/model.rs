@@ -103,14 +103,15 @@ pub struct CardData {
 }
 
 /// 渲染所需的位图素材（取不到就是 `None`，渲染层画占位图）。
+///
+/// 背景不在这里：它只是一条公网 URL（`[plugin.system] background_url`），由
+/// html2img 自己加载，本进程不再下载 / 缓存图片字节。
 #[derive(Debug, Clone, Default)]
 pub struct Assets {
-    /// 机器人的头像原图字节（jpeg / png）。
+    /// 机器人的头像原图字节（jpeg / png），渲染前会缩到 ≤192px 再转 data URI。
     pub bot_photo: Option<Vec<u8>>,
-    /// 管理员的头像原图字节（jpeg / png）。
+    /// 管理员的头像原图字节（jpeg / png），同上。
     pub admin_photo: Option<Vec<u8>>,
-    /// 背景图原图字节（jpeg / png）；`None` 时用纯渐变背景。
-    pub background: Option<Vec<u8>>,
 }
 
 #[cfg(test)]

@@ -1,6 +1,11 @@
 //! musiccard：生成网易云音乐卡片的 fuyubot 插件（Rust）。
 //!
-//! 处理链路：命令接收 → 网易云取数 → HTML 卡片渲染 → 上传照片。
+//! 处理链路：命令接收 → 网易云取数 → 卡片数据 → Vue 模板 → `fuyubot.html2img` 服务出图 → 上传照片。
+//!
+//! 渲染不落在插件里：界面在 [`assets/card.html`](../assets/card.html)（`<style>` + Vue 模板），
+//! 封面用网易云 CDN 的公网 URL、二维码用 `data:image/png;base64,…`，数据交给宿主上的
+//! html2img 服务（服务名 `fuyubot.html2img`，方法 `render`，`vue: true`）。
+//! 插件不拼 HTML、不链接 hyper-render，也不做任何位图合成。
 //!
 //! 模块划分：
 //! - [`cmd`]：命令解析与业务流程；
@@ -9,17 +14,19 @@
 //! - [`host`]：宿主适配（消息收发、更新调度）；
 //! - [`model`]：跨模块共享的数据模型；
 //! - [`netease`]：网易云接口；
-//! - [`render`]：卡片渲染与图片合成；
+//! - [`render`]：卡片数据映射 + 二维码 data URI + html2img 服务客户端；
 //! - [`util`]：纯工具函数。
 
-mod cmd;
-mod config;
-mod help;
-mod host;
-mod model;
-mod netease;
-mod render;
-mod util;
+// 模块一律 `pub`：crate 额外编了 rlib，`cargo test` / `examples/` 才能直接调内部模块。
+// 这不影响宿主加载 cdylib —— 宿主只找 `plugin_*` 那几个导出符号。
+pub mod cmd;
+pub mod config;
+pub mod help;
+pub mod host;
+pub mod model;
+pub mod netease;
+pub mod render;
+pub mod util;
 
 use fuyubot_plugin_api::{HostApi, HostExt, Plugin, Subscription, define_plugin};
 
@@ -78,6 +85,12 @@ impl Plugin for MusicCard {
         self.subscription = None;
         self.worker = None;
         self.host.info("musiccard: 已停止");
+    }
+
+    /// 硬依赖渲染服务：没装 `fuyubot.html2img` 时插件停在 Pending，
+    /// 而不是启动后每条命令都渲染失败。
+    fn inject() -> Vec<String> {
+        vec![render::html2img::SERVICE.to_owned()]
     }
 
     /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/musiccard` 登记进去；

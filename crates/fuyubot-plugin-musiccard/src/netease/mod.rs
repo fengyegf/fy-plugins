@@ -3,11 +3,12 @@
 //! 只依赖网络与 `serde_json`，不碰宿主、不碰渲染；命令层拿到的就是结构化数据。
 //!
 //! 内部拆成：
-//! - [`client`]：搜索 / 详情 / 歌词三个接口 + 封面下载；
+//! - [`client`]：搜索 / 详情 / 歌词三个接口；
 //! - [`lyric`]：LRC 解析与歌词选行。
 //!
-//! 对外只暴露 [`get_song`] / [`fetch_cover`] / [`select_lyrics`] /
-//! [`extract_song_id`] 与 [`MusicCardSong`]。
+//! 对外只暴露 [`get_song`] / [`select_lyrics`] / [`extract_song_id`] 与
+//! [`MusicCardSong`]。封面只保留 URL（[`MusicCardSong::cover_url`]），下载交给
+//! html2img 服务。
 
 mod client;
 mod lyric;
@@ -74,11 +75,6 @@ pub fn get_song(input: &str) -> Result<MusicCardSong, Error> {
         lyric: lyrics.lyric,
         translated_lyric: lyrics.translated,
     })
-}
-
-/// 下载封面原图字节（调用方负责解码）。
-pub fn fetch_cover(url: &str) -> Result<Vec<u8>, Error> {
-    client::download(url)
 }
 
 /// 从 LRC 里挑选最多 5 行歌词。

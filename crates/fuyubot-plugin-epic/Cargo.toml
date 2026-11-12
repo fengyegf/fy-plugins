@@ -5,7 +5,7 @@
 # - `rlib`：可被其他 Rust 代码依赖 / 被 `cargo test`、`examples/` 使用的库。
 [package]
 name = "fuyubot-plugin-epic"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
 description = "生成 Epic 免费游戏卡片并以照片回复消息"
@@ -17,9 +17,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 fuyubot-plugin-api.workspace = true
-hyper-render.workspace = true
-# 封面解码 / 合成：Epic CDN 上是 jpg，偶尔 webp。
-image = { workspace = true, features = ["jpeg", "png", "webp"] }
 serde_json.workspace = true
 thiserror.workspace = true
 ureq.workspace = true

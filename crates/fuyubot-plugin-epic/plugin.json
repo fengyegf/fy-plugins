@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "epic",
   "name": "Epic",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "kind": "native",
   "entry": "epic.dll",
   "abi": 6,

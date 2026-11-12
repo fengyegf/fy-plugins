@@ -1,26 +1,18 @@
 //! `/epic`：发现 Epic 免费游戏并出图。
 //!
-//! 流程：抓促销接口 → 截断到配置上限 → 并发下载封面（失败就留占位）→
-//! hyper-render 渲染卡片 → 发照片 → 删临时文件。
+//! 流程：抓促销接口 → 截断到配置上限 → 生成 Vue 模板的 `data` → 调
+//! `fuyubot.html2img` 渲染 → 发照片 → 删服务产物。界面在 `assets/card.html`；
+//! 封面不下载、不合成：模板直接把 Epic CDN 的 URL 写进 `<img src>`，由渲染服务
+//! 去拉取。
 //!
 //! 渲染失败不算致命：降级发一条纯文本清单，至少把信息送到。
 
-use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::Mutex;
 
-use fuyubot_plugin_api::{HostApi, HostExt};
-
-use crate::core::epic::{self, FreeGame, FreeGames, Query};
+use crate::core::epic::{self, FreeGames, Query};
 use crate::core::fetch::HttpClient;
 use crate::host::{Ctx, Msg};
 use crate::render::{self, RenderOptions};
-
-/// 单张封面上限：Epic 的宽图通常几百 KB，12 MiB 足够且能挡住异常大文件。
-const MAX_COVER_BYTES: u64 = 12 * 1024 * 1024;
-
-/// 封面并发下载数：8 张图串行要好几秒，4 路足够又不会把 CDN 打疼。
-const COVER_CONCURRENCY: usize = 4;
 
 /// 命令入口。出错只影响本次流程，不向外传播。
 pub fn run(ctx: &Arc<Ctx>, msg: Msg) {
@@ -59,15 +51,11 @@ fn flow(ctx: &Ctx, msg: Msg) -> Result<(), String> {
         return Ok(());
     }
 
-    let covers = download_covers(ctx, &client, &games);
-    if ctx.is_shutdown() {
-        return Ok(());
-    }
     let options = options(ctx);
-    let png = match render::render(&games, &covers, &options) {
-        Ok(png) => png,
+    let path = match render::render_card(&ctx.host, &games, &options) {
+        Ok(path) => path,
         Err(error) => {
-            // 渲染是"锦上添花"：引擎出问题也要把游戏清单送到，别让用户什么都收不到。
+            // 渲染是「锦上添花」：服务出问题也要把游戏清单送到，别让用户什么都收不到。
             ctx.error(&format!("epic: 渲染卡片失败，降级为文本: {error}"));
             send_text_list(ctx, msg, &games);
             return Ok(());
@@ -75,71 +63,39 @@ fn flow(ctx: &Ctx, msg: Msg) -> Result<(), String> {
     };
 
     if ctx.is_shutdown() {
+        // 图片已经渲出来了，停机不走发送流程也要把它删掉。
+        remove_artifact(ctx, &path);
         return Ok(());
     }
-    // 临时图用 RAII 守卫：正常返回、提前 return、panic unwind 都会删掉它。
-    let image = TempImage::create(ctx, temp_path(ctx, msg), &png)?;
 
     let caption = (!config.caption.trim().is_empty()).then_some(config.caption.as_str());
     let sent = ctx
         .messenger
-        .send_photo(msg.chat_id, &image.path, caption, Some(msg.id));
+        .send_photo(msg.chat_id, &path, caption, Some(msg.id));
     // TDLib 的上传在 sendMessage 返回时已完成，之后文件就没用了；先删再处理结果。
-    drop(image);
+    remove_artifact(ctx, &path);
     let sent = sent.map_err(|error| format!("发送图片失败: {error}"))?;
 
     ctx.info(&format!(
-        "epic: 已发送卡片图（消息 {}，{} 字节，缩放 {}，{games}）",
+        "epic: 已发送卡片图（消息 {}，{}，配置缩放 {}，{games}）",
         sent.message_id,
-        png.len(),
+        path.display(),
         options.scale
     ));
     Ok(())
 }
 
-/// 逐张下载封面；任何一张失败都只记日志，保留占位。
-///
-/// 用 `std::thread::scope` 分片并发：`HttpClient` 内部是 `ureq::Agent`，可共享。
-fn download_covers(ctx: &Ctx, client: &HttpClient, games: &FreeGames) -> Vec<Option<Vec<u8>>> {
-    let items: Vec<&FreeGame> = games.iter().collect();
-    let total = items.len();
-    let slots: Mutex<Vec<Option<Vec<u8>>>> = Mutex::new((0..total).map(|_| None).collect());
-    let next = Mutex::new(0usize);
-    let workers = COVER_CONCURRENCY.min(total).max(1);
-
-    std::thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| {
-                loop {
-                    let index = {
-                        let mut cursor = next.lock().unwrap_or_else(|e| e.into_inner());
-                        if *cursor >= total {
-                            break;
-                        }
-                        *cursor += 1;
-                        *cursor - 1
-                    };
-                    if ctx.is_shutdown() {
-                        break;
-                    }
-                    let game = items[index];
-                    let Some(url) = game.offer_image.as_deref() else {
-                        continue;
-                    };
-                    match client.get_bytes(url, MAX_COVER_BYTES) {
-                        Ok(bytes) => {
-                            slots.lock().unwrap_or_else(|e| e.into_inner())[index] = Some(bytes);
-                        }
-                        Err(error) => {
-                            ctx.warn(&format!("epic: 封面下载失败（{}）: {error}", game.title))
-                        }
-                    }
-                }
-            });
-        }
-    });
-
-    slots.into_inner().unwrap_or_else(|e| e.into_inner())
+/// 删除 html2img 的产物：它在服务临时目录里（24 小时后服务也会自己清），
+/// 上传完成后就没用了。删失败只记日志，不影响命令结果。
+fn remove_artifact(ctx: &Ctx, path: &std::path::Path) {
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => ctx.warn(&format!(
+            "epic: 删除渲染产物失败（{}）: {error}",
+            path.display()
+        )),
+    }
 }
 
 /// 渲染失败的降级路径：发一条纯文本清单。
@@ -183,49 +139,4 @@ fn trim(games: FreeGames, max: usize) -> FreeGames {
     let left = max.saturating_sub(current.len());
     let upcoming = games.upcoming.into_iter().take(left).collect();
     FreeGames { current, upcoming }
-}
-
-/// 临时文件路径。
-///
-/// 用 `chat_id + 命令消息 id` 而不是时间戳：同一条命令重投/并发重复执行时也只会
-/// 覆盖同名文件，不会在缓存目录里堆一堆互不相干的图。
-fn temp_path(ctx: &Ctx, msg: Msg) -> PathBuf {
-    ctx.config
-        .cache_dir
-        .join(format!("epic-{}-{}.png", msg.chat_id, msg.id))
-}
-
-/// 临时图守卫：`Drop` 时删除文件，unwind 也能兜住。
-struct TempImage {
-    path: PathBuf,
-    host: HostApi,
-}
-
-impl TempImage {
-    /// 落盘并交给守卫；目录不存在就建。
-    fn create(ctx: &Ctx, path: PathBuf, bytes: &[u8]) -> Result<Self, String> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|error| format!("创建缓存目录失败: {error}"))?;
-        }
-        std::fs::write(&path, bytes).map_err(|error| format!("写入渲染结果失败: {error}"))?;
-        Ok(Self {
-            path,
-            host: ctx.host,
-        })
-    }
-}
-
-impl Drop for TempImage {
-    fn drop(&mut self) {
-        match std::fs::remove_file(&self.path) {
-            Ok(()) => {}
-            // 已经不在了（比如被手工清理）不算错误。
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => self.host.warn(&format!(
-                "epic: 删除临时文件失败（{}）: {error}",
-                self.path.display()
-            )),
-        }
-    }
 }

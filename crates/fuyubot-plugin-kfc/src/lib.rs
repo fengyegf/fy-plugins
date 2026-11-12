@@ -1,15 +1,15 @@
 //! kfc：点个肯德基吧——抓一句「肯德基疯话」，渲染成推特卡片发回去。
 //!
 //! 从 TS 版 `plugins/kfc`（`index.ts` + `kfc.vue` + `genImg.ts` 的 satori/resvg 管线）
-//! 迁移而来，渲染链路换成纯 Rust（借鉴 hyper-render 的 Blitz + Vello 方案），
-//! 不再依赖 Node / Vue / sharp。
+//! 迁移而来。卡片界面是 `assets/card.html` 里的 Vue 模板，插件只把文案凑成 data，交给宿主上的 `fuyubot.html2img` 服务
+//! （HTML/CSS → PNG/JPEG，纯 Rust，无 Chromium），不再依赖 Node / Vue / sharp。
 //!
 //! 分层：
 //!
 //! - [`host`]：宿主适配层，只说「怎么和 fuyubot 通信」（消息、订阅、线程模型）；
 //! - [`cmd`]：命令层，`/kfc` 一条命令一个文件；
 //! - [`core`]：与宿主无关的能力（取文案、清洗文本、配置）；
-//! - [`render`]：图像生成，HTML 模板 → PNG，一行内容一张卡片；
+//! - [`render`]：图像生成，`assets/card.html` 的 Vue 模板 + 数据 → `fuyubot.html2img` → 本机图片文件；
 //! - [`help`]：`/help` 联动——把 `/kfc` 登记进内置帮助的命令表。
 //!
 //! 线程模型与 ABI 约束见 [`host`] 模块文档：宿主回调只投递，业务线程里才做阻塞操作。
@@ -72,6 +72,12 @@ impl Plugin for Kfc {
         self.subscription = None;
         self.worker = None;
         self.host.info("kfc: 已停止");
+    }
+
+    /// 硬依赖渲染服务：没装 `fuyubot.html2img` 时插件停在 Pending，
+    /// 而不是启动后每条命令都渲染失败。
+    fn inject() -> Vec<String> {
+        vec![render::html2img::SERVICE.to_owned()]
     }
 
     /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/kfc` 登记进去；

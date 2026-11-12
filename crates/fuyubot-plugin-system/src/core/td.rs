@@ -261,6 +261,21 @@ pub fn identity_of(user: &Value) -> Identity {
 mod tests {
     use super::*;
 
+    /// 单元测试写临时文件的位置。
+    ///
+    /// 不用 `std::env::temp_dir()`：部分受限执行环境（沙箱 / CI）只允许写工作区，
+    /// 系统临时目录会以 `PermissionDenied` 失败。放在 workspace 的 `target/` 下，
+    /// 既一定可写，也已被 git 忽略。
+    fn test_temp_dir() -> std::path::PathBuf {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("target")
+            .join("test-tmp");
+        std::fs::create_dir_all(&dir).expect("创建测试临时目录");
+        dir
+    }
+
     #[test]
     fn identity_is_read_from_tdlib_user_shape() {
         let user = json!({
@@ -316,7 +331,7 @@ mod tests {
         assert!(read_file("").is_none());
         assert!(read_file(r"Z:\definitely-missing\avatar.jpg").is_none());
 
-        let path = std::env::temp_dir().join("fuyubot-system-td-empty-avatar-test.jpg");
+        let path = test_temp_dir().join("fuyubot-system-td-empty-avatar-test.jpg");
         std::fs::write(&path, b"").expect("写临时文件");
         assert!(read_file(path.to_str().expect("UTF-8 路径")).is_none());
         let _ = std::fs::remove_file(&path);
@@ -326,7 +341,7 @@ mod tests {
     /// 并把实际发出去的请求抓下来，防止 `priority` / `synchronous` 再被漏掉。
     #[test]
     fn avatar_downloads_synchronously_and_reads_local_file() {
-        let path = std::env::temp_dir().join("fuyubot-system-avatar-wiring-test.jpg");
+        let path = test_temp_dir().join("fuyubot-system-avatar-wiring-test.jpg");
         std::fs::write(&path, b"\xff\xd8fake-jpeg-bytes").expect("写头像临时文件");
         let payload = json!({
             "@type": "file",

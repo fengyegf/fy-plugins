@@ -1,8 +1,8 @@
-//! 网易云 HTTP 取数：搜索 / 歌曲详情 / 歌词 / 封面下载。
+//! 网易云 HTTP 取数：搜索 / 歌曲详情 / 歌词。
 //!
 //! HTTP 走 `ureq` 阻塞式调用；命令本来就在独立业务线程里跑，不需要 async runtime。
+//! 封面不在这里下载：`cover_url` 作为模板 data 的公网 URL，由 html2img 服务去拉。
 
-use std::io::Read;
 use std::time::Duration;
 
 use serde_json::Value;
@@ -29,8 +29,6 @@ pub const LYRIC_URL: &str = "https://interface3.music.163.com/api/song/lyric";
 
 /// JSON 接口超时。
 const API_TIMEOUT: Duration = Duration::from_secs(15);
-/// 封面下载超时。
-const COVER_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// 一首歌的展示字段（不含歌词）。
 #[derive(Debug, Clone)]
@@ -229,22 +227,4 @@ pub fn song_lyric(song_id: i64) -> Result<Lyrics, Error> {
             .unwrap_or_default()
             .to_owned(),
     })
-}
-
-/// 下载任意 URL 的原始字节（封面用）。
-///
-/// 下载封面时只带 UA 与 Referer，不携带接口 Cookie，超时 20s。
-pub fn download(url: &str) -> Result<Vec<u8>, Error> {
-    let response = agent(COVER_TIMEOUT)
-        .get(url)
-        .set("Referer", REFERER)
-        .call()
-        .map_err(|err| Error::Http(format!("{url} 下载失败：{}", describe(err))))?;
-
-    let mut bytes = Vec::new();
-    response
-        .into_reader()
-        .read_to_end(&mut bytes)
-        .map_err(|err| Error::Http(format!("{url} 读取响应失败：{err}")))?;
-    Ok(bytes)
 }

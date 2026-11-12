@@ -5,7 +5,7 @@
 # - `rlib`：可被其他 Rust 代码依赖 / 被 `cargo test`、`examples/` 使用的库。
 [package]
 name = "fuyubot-plugin-musiccard"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
 description = "生成网易云音乐卡片的 FuyuBot 插件"
@@ -17,10 +17,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 fuyubot-plugin-api.workspace = true
-# 卡片渲染：Chromium-free 的 HTML → PNG（借鉴 hyper-render），版面交给 CSS。
-hyper-render.workspace = true
-# 底图模糊 / 渐变叠加 / 封面与二维码合成 / 最终编码 JPEG。
-image = { workspace = true, features = ["jpeg", "png"] }
+# 只用来给二维码编码 PNG（封面 / 背景由 html2img 服务按公网 URL 自己下载）。
+image = { workspace = true, features = ["png"] }
 # 二维码生成。
 qrcode = "0.14"
 # 网易云接口走阻塞式 HTTP：命令本来就在独立业务线程里跑，不需要 async runtime。

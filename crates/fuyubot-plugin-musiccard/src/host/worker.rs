@@ -114,6 +114,7 @@ impl Drop for Worker {
 }
 
 /// 宿主回调：只投递，不做任何阻塞操作。
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C-unwind" fn on_update(user: *mut c_void, payload: *const c_char) -> i32 {
     if user.is_null() || payload.is_null() {
         return -1;

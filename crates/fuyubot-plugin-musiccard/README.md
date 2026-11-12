@@ -1,8 +1,13 @@
 # FuyuBot MusicCard
 
 网易云音乐卡片插件，基于 FuyuBot Plugin SDK 构建。收到歌曲 ID、网易云歌曲链接或
-搜索关键词后，插件会获取歌曲信息和歌词，生成一张 `650 x 1220` 的 JPEG 卡片，并以
-照片回复触发命令的消息。
+搜索关键词后，插件会获取歌曲信息和歌词，把卡片数据交给 Vue 模板（`assets/card.html`），
+由宿主上的 [`fuyubot.html2img`](https://github.com/xiaoqvan/fuyubot-plugins/tree/main/crates/fuyubot-plugin-html2img)
+服务（`vue: true`）渲染成 `650 x 1220` 的 JPEG，再以照片回复触发命令的消息。
+
+界面（HTML / CSS / 循环 / 条件 / 插值）全在模板里，Rust 只做数据映射：封面直接用
+网易云 CDN 的公网 URL，二维码以 `data:image/png;base64,…` 内联；插件不拼 HTML、
+不链接 hyper-render，也不做任何位图合成。
 
 ## 功能
 
@@ -10,7 +15,17 @@
 - 自动读取中英文歌词，并按时间匹配原文与译文。
 - 生成包含封面、歌曲信息、歌词、日期和歌曲二维码的卡片。
 - 处理期间发送进度消息，完成后自动删除。
-- 失败时回复具体原因，并清理临时文件与进度消息。
+- 失败时回复具体原因，并清理渲染产物与进度消息。
+
+## 依赖
+
+- **必须安装 `fuyubot.html2img` 插件**：本插件用 `Plugin::inject` 声明了硬依赖，
+  宿主会在渲染服务就绪后再启动 musiccard；没装时插件停在 Pending（不会静默失败）。
+- 渲染器是 hyper-render 的本地 fork（Blitz + Stylo + Taffy + Vello CPU），纯 Rust、
+  无 Chromium / Node；它只存在于 html2img 插件里，本插件不再链接渲染引擎。
+- 卡片模板 `assets/card.html` 在编译期嵌入（`include_str!`），只有几 KiB；
+  封面是网易云 CDN 的公网 URL，由 html2img 服务下载（单张上限 8 MiB）；二维码以
+  data URI 内联在 `data` 里。模板远低于服务的 128 KiB 上限。
 
 ## 与 `/help` 的联动
 
@@ -36,10 +51,11 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
 
 1. 解析命令并提取歌曲 ID、链接或关键词。
 2. 调用网易云接口完成搜索、歌曲详情与歌词获取。
-3. 下载封面，筛选最多 5 行歌词并匹配译文。
-4. 通过 HTML 版面与 Rust 图像合成生成 JPEG 卡片。
-5. 将图片发送到触发命令的聊天，并回复原消息。
-6. 删除进度消息和本地临时文件。
+3. 筛选最多 5 行歌词并匹配译文；封面只保留接口给的公网 URL，不再下载。
+4. 把卡片映射成 Vue 模板的 `data`（标题 / 歌手 / 专辑 / 封面 URL / 二维码 / 日期 /
+   歌词 / 适配字号），调 `fuyubot.html2img`（`vue: true`）渲染成 `650 x 1220` 的 JPEG。
+5. 把服务返回的本机图片路径直接作为照片发送，并回复原消息。
+6. 删除渲染产物与进度消息。
 
 任何一步失败都会结束当前任务并回复错误原因，不会影响其他正在执行的命令。
 
@@ -48,29 +64,30 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
 | 路径 | 说明 |
 | --- | --- |
 | `src/lib.rs` | 插件入口、生命周期与消息订阅 |
-| `src/config.rs` | 插件配置读取与临时目录处理 |
+| `src/config.rs` | 插件配置读取（命令前缀、接口超时） |
 | `src/host/` | 宿主消息收发、更新路由与业务线程 |
 | `src/cmd/` | 命令解析、分发与卡片业务流程 |
-| `src/netease/` | 搜索、歌曲详情、歌词、封面下载与 LRC 解析 |
-| `src/render/` | HTML 版面、二维码、背景与最终图片合成 |
+| `src/netease/` | 搜索、歌曲详情、歌词与 LRC 解析（封面只取 URL） |
+| `assets/card.html` | 卡片界面：`<style>` + Vue 模板（循环 / 条件 / 插值） |
+| `src/render/` | 卡片数据映射（`view_data`）、二维码 data URI、html2img 服务客户端 |
 | `src/model.rs` | 跨模块共享的数据结构 |
 | `src/util/` | 文本处理等通用工具 |
 | `plugin.json` | 插件商城 bundle 清单 |
 
 ## 配置
 
-插件默认可以直接运行。需要自定义临时目录时，在主程序配置中增加：
+插件默认可以直接运行，所有配置都是可选的：
 
 ```toml
 [plugin.musiccard]
-temp_dir = "C:/Temp/fuyubot-musiccard"
+request_timeout_ms = 15000   # 接口超时（缺省 15s）
 
 [config]
 PREFIXES = ["/", "!", "！", ".", "#"]
 ```
 
-`temp_dir` 未填写时使用 `<系统临时目录>/fuyubot-musiccard`。如果该目录无法创建，
-插件会尝试使用宿主工作目录下的 `.musiccard-tmp`。
+卡片不再落盘到本地：渲染产物由 `fuyubot.html2img` 服务写在它自己的临时目录里，
+插件发完照片就删除。老配置里残留的 `temp_dir` 会被安静忽略。
 
 ## 构建
 
@@ -151,10 +168,37 @@ Copy-Item target\release\musiccard.dll <FuyuBot目录>\plugins\
 
 ## 实现说明
 
-- 卡片尺寸为 `650 x 1220`，最终以质量约 90 的 JPEG 输出。
-- HTML 版面由 `hyper-render` 渲染；封面和二维码由 `image` 与 `qrcode` 在 Rust 侧
-  合成。
-- 网络请求使用阻塞式 `ureq`，运行在命令专用业务线程中，不阻塞宿主的消息接收线程。
-- 临时文件名包含进程号、纳秒时间戳和递增序号，避免并发任务重名。
+- 卡片尺寸固定为 `650 x 1220`：`scale = 1.0`、`format = jpg`、`auto_height = false`。
+- 界面在 `assets/card.html`（`<style>` + 原 `musiccard.vue` 的模板正文），Rust 只把
+  `Card` 映射成 `data` 再调 `fuyubot.html2img`（`vue: true`），不拼 HTML、不链接渲染引擎。
+- `data` 字段：`title` / `artists` / `album` / `cover` / `qrCode` / `month` / `day` /
+  `lyrics`（每项 `{text, translation}`），外加模板里算不出来的排版值 `titleSize` /
+  `artistsSize`（按 454px 文字列预算的适配字号；vue-template-html 没有函数调用 / Math）。
+- 封面直接写网易云 CDN 的公网 URL（背景 `opacity:.34` + 卡片内 546x546 封面）；
+  不可用时 `cover` 传 `null`，模板只留渐变底与封面占位，其余版面不变。二维码仍在
+  本地用 `qrcode` 生成 PNG，再以 `data:image/png;base64,…` 内联。
+- 虚线用一排 2px 小方块拼（Blitz 的 `border-style:dashed` 不可靠），在模板里由
+  `v-for` 生成，Rust 不参与。
+- 网络请求使用阻塞式 `ureq`，整体跑在命令专用业务线程中，不阻塞宿主的消息接收线程；
+  html2img 的服务调用同样是同步阻塞的，只在业务线程里调。
 - 歌词按字符截断，避免中文和 emoji 被字节边界切坏。
 - 卡片优先使用系统字体，常见中文环境会回退到 Microsoft YaHei 或 PingFang SC。
+
+### 模板校验（不依赖 html2img）
+
+模板是纯 Vue 模板，可以用仓库里的 `target/vuecheck` 本地编译 + 渲染核对：
+
+```powershell
+cargo test -p fuyubot-plugin-musiccard   # 顺带把请求 / data 样张写到 target/qa/json/
+cd target/vuecheck
+cargo run --quiet -- ../../crates/fuyubot-plugin-musiccard/assets/card.html ../qa/json/musiccard-data.json ../qa/json/out.html
+```
+
+输出 `OK … bytes` 说明模板可编译、可渲染（示例约 26 KiB，远低于 128 KiB）。
+样张覆盖三个分支：正常封面、无封面（`cover: null`）、超长标题（`titleSize` 缩到下限）。
+
+也可以直接从 example 导出请求 / data：
+
+```powershell
+cargo run --example render_card_musiccard -- --out card.json --data data.json
+```

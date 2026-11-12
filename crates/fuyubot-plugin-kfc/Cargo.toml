@@ -5,7 +5,7 @@
 # - `rlib`：可被其他 Rust 代码依赖 / 被 `cargo test`、`examples/` 使用的库。
 [package]
 name = "fuyubot-plugin-kfc"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
 description = "点个肯德基吧：抓一句肯德基疯话，渲染成推特卡片发回去"
@@ -18,7 +18,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 fuyubot-plugin-api.workspace = true
-hyper-render.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 ureq.workspace = true
