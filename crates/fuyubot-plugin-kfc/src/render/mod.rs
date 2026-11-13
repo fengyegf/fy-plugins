@@ -84,7 +84,74 @@ pub fn clamp_width(width: u32) -> u32 {
     width.clamp(MIN_WIDTH, MAX_WIDTH)
 }
 
-/// 卡片模板要的数据：正文 + 卡片宽度（宽度由模板拼进 `style`）。
+/// 卡片内边距（模板里的 `padding:20px`）。
+pub const CARD_PADDING: u32 = 20;
+/// 卡片边框宽度（模板里的 `border:1px`）。
+pub const CARD_BORDER: u32 = 1;
+/// 头像边长（模板里的 `width/height:100px`）。
+pub const AVATAR_SIZE: u32 = 100;
+/// 头像右侧间距（模板里的 `margin-right:15px`）。
+pub const AVATAR_GAP: u32 = 15;
+/// 内容列右侧留白（模板里的 `margin-right:30px`）。
+pub const CONTENT_MARGIN: u32 = 30;
+/// 正文宽度占内容列的比例：模板原来是 `width:95%`。
+const TEXT_WIDTH_NUM: u32 = 95;
+const TEXT_WIDTH_DEN: u32 = 100;
+
+/// 内容列（头像右边那一列）的宽度，单位 CSS 像素。
+///
+/// **必须算成确定值交给模板**：html2img 的渲染器不会按 `flex-grow` 把内容列
+/// 收窄进卡片，而是取 max-content 宽度——正文和图标行会直接顶出卡片右侧
+/// （线上表现：正文第一行被卡片右边缘切掉、五个互动图标只剩第一个可见）。
+/// 这里把宽度算好，模板只读字段，不再依赖 flex 收缩。
+pub fn content_width(width: u32) -> u32 {
+    width.saturating_sub(
+        2 * (CARD_BORDER + CARD_PADDING) + AVATAR_SIZE + AVATAR_GAP + CONTENT_MARGIN,
+    )
+}
+
+/// 正文宽度：内容列的 95%，也就是 `white-space:pre-wrap` 的换行宽度。
+pub fn text_width(width: u32) -> u32 {
+    content_width(width) * TEXT_WIDTH_NUM / TEXT_WIDTH_DEN
+}
+
+/// 卡片模板要的数据：正文 + 卡片宽度 + 内容列 / 正文的确定宽度（模板拼进 `style`）。
 pub fn view_data(content: &str, width: u32) -> Value {
-    json!({ "content": content, "width": width })
+    json!({
+        "content": content,
+        "width": width,
+        "contentWidth": content_width(width),
+        "textWidth": text_width(width),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn content_column_leaves_room_for_avatar_and_padding() {
+        // 800 宽：800 - 2*(1+20) - 100 - 15 - 30 = 613，与 TS 版实测的内容列一致。
+        assert_eq!(content_width(800), 613);
+        assert_eq!(text_width(800), 582);
+    }
+
+    #[test]
+    fn narrow_cards_do_not_underflow() {
+        // 最窄 460：460 - 42 - 145 = 273，正文 259。
+        assert_eq!(content_width(MIN_WIDTH), 273);
+        assert_eq!(text_width(MIN_WIDTH), 259);
+        // 比装饰宽度还窄时退化成 0，而不是下溢成天文数字。
+        assert_eq!(content_width(0), 0);
+        assert_eq!(text_width(0), 0);
+    }
+
+    #[test]
+    fn view_data_exposes_definite_widths() {
+        let data = view_data("文案", 800);
+        assert_eq!(data["content"], "文案");
+        assert_eq!(data["width"], 800);
+        assert_eq!(data["contentWidth"], 613);
+        assert_eq!(data["textWidth"], 582);
+    }
 }

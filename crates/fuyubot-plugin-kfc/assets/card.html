@@ -13,9 +13,9 @@ body{padding:0}
                     alt="Avatar" class="avatar-image" style="width:100%;height:100%;object-fit:cover;" />
             </div>
 
-            <div class="content-wrapper" style="margin-right:30px; flex-grow:1;display:flex;flex-direction:column;">
+            <div class="content-wrapper" :style="'width:' + contentWidth + 'px;min-width:0;margin-right:30px;display:flex;flex-direction:column;'">
                 <div class="user-info"
-                    style="display:flex;flex-direction:row;align-items:center;width:100%;justify-content:flex-start;">
+                    :style="'width:' + contentWidth + 'px;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;'">
                     <span class="username"
                         style="display:flex;align-items:center;font-weight:bold;color:#14171a;font-size:30px;">
                         <span class="username-text">KFC</span>
@@ -29,13 +29,12 @@ body{padding:0}
                     <span class="handle" style="color:#657786;margin-left:5px;font-size:28px;">@KFC · 刚刚</span>
                 </div>
 
-                <div class="tweet-text"
-                    style="font-size:30px;color:#14171a;white-space:pre-wrap;word-break:break-word;width:95%;">
-                    {{ content }}
-                </div>
+                <!-- 正文必须紧贴标签：vue-template-html 会把模板里的换行 / 缩进原样留在输出里，
+                     正文又是 white-space:pre-wrap，多出来的换行 + 缩进会渲染成「空一行 + 首行缩进」。 -->
+                <div class="tweet-text" :style="'width:' + textWidth + 'px;font-size:30px;color:#14171a;white-space:pre-wrap;word-break:break-word;'">{{ content }}</div>
                 <!-- 互动按钮区域 -->
                 <div class="action-buttons"
-                    style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;width:100%;margin-top:20px;">
+                    :style="'width:' + contentWidth + 'px;display:flex;flex-direction:row;align-items:center;justify-content:space-between;margin-top:20px;'">
 
                     <div class="action-button reply-button"
                         style="display:flex;align-items:center;justify-content:center;">

@@ -127,7 +127,7 @@ assets/
 ```text
 文案
   ↓ text::normalize          换行归一、控制字符清理
-  ↓ render::view_data()      { content, width }
+  ↓ render::view_data()      { content, width, contentWidth, textWidth }
   ↓ host.call_service("fuyubot.html2img", "render", { html: assets/card.html, vue: true, data, … })
   ↓ 服务里：Vue 模板 + data → HTML → JPEG
   ↓ 服务返回 { ok: true, path: "…/html2img_xxx.jpg" }
@@ -136,6 +136,12 @@ assets/
 
 ## 已知限制
 
+- **内容列 / 正文的宽度由 Rust 算成确定像素**（`contentWidth` / `textWidth`）：渲染器按
+  `min-width: auto` 取内容列的 min-content 宽度，`flex-grow: 1` 收不窄，正文和互动图标行
+  会顶出卡片右边缘（线上表现：正文第一行被切掉、五个图标只剩第一个）。
+- **正文插值必须紧贴标签**：`<div class="tweet-text" …>{{ content }}</div>`。
+  `vue-template-html` 会把模板里的换行 / 缩进原样留在输出里，而正文是
+  `white-space: pre-wrap`，插值前后多出来的缩进会变成「空一行 + 首行缩进」。
 - 渲染器**不执行 JavaScript**：卡片是 Vue 模板 + 静态 CSS，编译后就是静态 HTML，正好不需要 JS。
 - html2img **只加载公网 `http(s)` 与 `data:` 图片**（`file://`、相对路径、私网 / 回环地址
   都会被拒绝）；本卡片的头像走 `data:`，其它图形是内联 SVG，不依赖网络。

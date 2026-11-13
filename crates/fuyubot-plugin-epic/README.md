@@ -25,7 +25,8 @@ Epic 免费游戏卡片插件，基于 FuyuBot Plugin SDK 构建。插件读取 
 - 封面以公网 https URL 交给渲染服务；接口没给封面、或 URL 不是公网 https
   （`http://`、`file://`、`data:`、私网 / 回环地址）时数据里是空串，模板画深灰
   占位块，不影响出图。
-- 卡片行用 `flex-wrap` 自动换行，支持多行多列和自定义输出缩放。
+- 当前免费与即将免费**排在同一行**（顺序 present → Coming，与原版 `epic.vue` 一致），
+  超过 `max_per_row` 张才用 `flex-wrap` 折到下一行；支持多行多列和自定义输出缩放。
 - 渲染失败时自动降级为文本游戏清单。
 - html2img 返回的临时图在发送完成后立即删除。
 - 命令前缀与宿主顶层 `[config] PREFIXES` 保持一致。
@@ -198,7 +199,8 @@ cargo run --quiet -- ../../crates/fuyubot-plugin-epic/assets/card.html \
 ## 渲染说明
 
 - 画布**宽度固定**（按列数算好后传给 html2img），高度用 `auto_height: true` 由内容
-  撑开；卡片行用 `flex-wrap: wrap` 自动换行，`max_per_row` 只影响画布宽度的计算。
+  撑开；`present` 与 `Coming` 的卡片放在**同一个** `flex-wrap: wrap` 行里（顺序
+  present → Coming，与原版 `epic.vue` 一致），`max_per_row` 决定一行放几张、画布多宽。
 - 输出格式固定 `jpg`：卡片是深色不透明背景，JPEG 体积小、够 Telegram 照片用。
 - 发请求前按服务的默认上限做校验：估算高度 ≤ 6000px、总像素 ≤ 16M（超出时自动下调
   `scale`，最低 0.5）、模板 ≤ 128 KiB。校验失败会给出明确原因并降级成文本清单。

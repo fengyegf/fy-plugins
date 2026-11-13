@@ -44,8 +44,10 @@ body{padding:0}
             <p class="m-0 p-0" style="font-size:20px;line-height:32px;">Epic Games Store</p>
         </div>
     </div>
-    <div v-if="present.length || Coming.length" class="flex flex-col" :style="'gap:' + gap + 'px'">
-        <div v-if="present.length" class="flex" :style="'flex-wrap:wrap;gap:' + gap + 'px'">
+    <!-- 当前免费 + 即将免费放在**同一行**里，顺序是 present → Coming：
+         原版 epic.vue 就是一个 flex 行，拆成两行会让「1 个当前免费 + 2 个即将免费」
+         排成 1+2 两行、右侧留一大片空白（线上就是这么错的）。 -->
+    <div v-if="present.length || Coming.length" class="flex" :style="'flex-wrap:wrap;gap:' + gap + 'px'">
             <div v-for="game in present" class="flex flex-col" :style="'width:' + cardWidth + 'px'">
                 <div class="flex flex-col rounded-lg overflow-hidden">
                     <img v-if="game.offerImage" :src="game.offerImage" alt="" class="h-50" :style="'height:' + coverHeight + 'px;object-fit:cover'" />
@@ -58,8 +60,6 @@ body{padding:0}
                     <p v-else class="text-neutral-400 m-0 p-0">当前免费</p>
                 </div>
             </div>
-        </div>
-        <div v-if="Coming.length" class="flex" :style="'flex-wrap:wrap;gap:' + gap + 'px'">
             <div v-for="game in Coming" class="flex flex-col" :style="'width:' + cardWidth + 'px'">
                 <div class="flex flex-col rounded-lg overflow-hidden">
                     <img v-if="game.offerImage" :src="game.offerImage" alt="" class="h-50" :style="'height:' + coverHeight + 'px;object-fit:cover'" />
@@ -71,7 +71,6 @@ body{padding:0}
                     <p class="text-neutral-400 m-0 p-0">免费{{ game.startDate }} - {{ game.endDate }}</p>
                 </div>
             </div>
-        </div>
     </div>
     <div v-else class="flex items-center justify-center" :style="'height:100px;color:#a3a3a3;font-size:16px'">{{ emptyText }}</div>
 </div>
