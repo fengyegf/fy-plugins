@@ -37,6 +37,18 @@ pub fn text(doc: &Html, selector: &str) -> String {
         .unwrap_or_default()
 }
 
+/// 元素内部第一个命中选择器的文本。
+pub fn inner_text(element: &ElementRef, selector: &str) -> String {
+    match Selector::parse(selector) {
+        Ok(selector) => element
+            .select(&selector)
+            .next()
+            .map(|node| clean(&node.text().collect::<String>()))
+            .unwrap_or_default(),
+        Err(_) => String::new(),
+    }
+}
+
 /// 选择器命中的每个元素的图片地址（`src` / `data-src`），补全协议后返回。
 pub fn images(doc: &Html, selector: &str, base: &str) -> Vec<String> {
     elements(doc, selector)
