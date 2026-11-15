@@ -5,7 +5,7 @@ TS 版 `E:\Fuyu_TDBot\plugins\kfc`（`index.ts` + `kfc.vue`）的 Rust 迁移版
 `/kfc` → 抓一句「肯德基疯话」→ 渲染成一张推特风格卡片 → 以照片回复命令消息 → 删除临时文件。
 
 图像生成不再由插件自己完成：卡片界面是 `assets/card.html` 里的 **Vue 模板 + 内联 CSS**
-（原 `kfc.vue` 的模板），Rust 只把文案 / 宽度凑成 `data`，交给宿主上的
+（原 `kfc.vue` 的模板），Rust 只把文案 / 宽度 / 互动数字凑成 `data`，交给宿主上的
 [`fuyubot.html2img`](https://github.com/xiaoqvan/fuyubot-plugins/tree/main/crates/fuyubot-plugin-html2img)
 插件（服务名 `fuyubot.html2img`，方法 `render`）。渲染器是 hyper-render 的本地 fork
 （Blitz + Stylo + Taffy + Vello CPU），**纯 Rust、无 Chromium / Node**，但只存在于
@@ -105,7 +105,7 @@ src/
     messenger.rs    sendMessage / sendPhoto 的 simplify 封装
     worker.rs       回调 → channel → 路由线程 → 业务线程
   render/
-    mod.rs          数据映射 view_data()、render_card()、宽度夹取、模板嵌入
+    mod.rs          数据映射 view_data()（含随机互动数字）、render_card()、宽度夹取、模板嵌入
     html2img.rs     fuyubot.html2img 服务客户端（vue 模式：拼入参 / 调服务 / 解析 path）
 assets/
   card.html        Vue 卡片模板（<style> + 原 kfc.vue 的模板正文；头像 base64、图标内联）
@@ -127,18 +127,41 @@ assets/
 ```text
 文案
   ↓ text::normalize          换行归一、控制字符清理
-  ↓ render::view_data()      { content, width, contentWidth, textWidth }
+  ↓ render::view_data()      { content, width, contentWidth, textWidth, 四个随机互动数字, 互动行尺寸 }
   ↓ host.call_service("fuyubot.html2img", "render", { html: assets/card.html, vue: true, data, … })
   ↓ 服务里：Vue 模板 + data → HTML → JPEG
   ↓ 服务返回 { ok: true, path: "…/html2img_xxx.jpg" }
   ↓ send_photo(path) → 删除 path
 ```
 
+## 互动行（新版 X 布局 + 随机数字）
+
+互动行按新版 X 的排布：左区「回复 / 转帖 / 喜欢 / 查看」四等分平铺，右区「书签 / 分享」
+收在一起——查看（bar-chart）是左区第四格，和网页版新版 X 一致。四个数字每次出图现掷：
+
+| 字段 | 随机范围 | 格式 |
+|---|---|---|
+| `replyCount` | 300–19,999 | 千分位或万，如 `4,584` / `1.2万` |
+| `repostCount` | 900–99,999 | 万位上下浮动，如 `1.2万` / `3万` |
+| `likeCount` | 4,000–999,999 | 多为万，如 `12万` |
+| `viewsCount` | 30,000–9,999,999 | 必定是万，如 `368万` |
+
+格式化规则与 X 的中文计数一致（`format_count`）：小于 1 万用千分位；1 万–10 万取一位小数、
+截断不四舍五入；10 万以上取整数万。随机数用进程内 xorshift64*（种子混时间 / 栈地址 / 序号），
+不为四个装饰数字引 `rand`。
+
+互动图标全部来自 x.com 的图标 sprite（新版 X 的 `icon-reply` / `icon-repost` / `icon-heart` /
+`icon-bar-chart` / `icon-bookmark` / `icon-share-ios` 的 path），不是自绘：查看那个条形图就是
+X 自己的 `bar-chart`。图标边长 / 数字字号 / 间距按内容列宽度等比缩放（800 宽卡片下图标 32px、
+数字 22px），460 的窄卡片缩到图标 16px、数字 10px，四个数字 + 书签 / 分享仍然排得进
+273px 的内容列。
+
 ## 已知限制
 
 - **内容列 / 正文的宽度由 Rust 算成确定像素**（`contentWidth` / `textWidth`）：渲染器按
   `min-width: auto` 取内容列的 min-content 宽度，`flex-grow: 1` 收不窄，正文和互动图标行
-  会顶出卡片右边缘（线上表现：正文第一行被切掉、五个图标只剩第一个）。
+  会顶出卡片右边缘（线上表现：正文第一行被切掉、互动图标只剩第一个）。互动行的图标 /
+  字号 / 间距同样由 `actionIcon` / `actionFont` 等字段算好交给模板，不走 flex 收缩兜底。
 - **正文插值必须紧贴标签**：`<div class="tweet-text" …>{{ content }}</div>`。
   `vue-template-html` 会把模板里的换行 / 缩进原样留在输出里，而正文是
   `white-space: pre-wrap`，插值前后多出来的缩进会变成「空一行 + 首行缩进」。
@@ -155,7 +178,7 @@ assets/
   接口文案偶尔带 `◁ ▷ ↻ ❚ ♬` 这类符号，少了 `Segoe UI Symbol` 就是豆腐块；
   但 `Segoe UI Emoji` 必须排在它**前面**，否则 emoji 会被 Symbol 的单色字形抢走。
   少数旗帜类 emoji 仍不完美：可能显示成方块，或退化成区域指示字母（🇨🇳 → `CN`）。
-- 宽度夹在 460–1600：低于 460 时内容列放不下「头像 + 昵称 + 蓝标 + 句柄」，
+- 宽度夹在 460–1600：低于 460 时内容列放不下「头像 + 昵称 + 蓝标 + 句柄 + 六个互动动作」，
   句柄会断在半个词上，用户名行进入换行兜底后卡片底部还会多出一条空白带
   （实测 400–456 有 96–139px），所以直接抬高下限而不是渲染出残版式。
 

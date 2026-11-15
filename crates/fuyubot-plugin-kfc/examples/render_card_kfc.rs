@@ -2,7 +2,8 @@
 //!
 //! 界面在 `assets/card.html`（Vue 模板 + 内联 CSS）；渲染由宿主的
 //! `fuyubot.html2img` 服务完成。这里把 `{ html, vue, data, … }` 落盘，
-//! 装好 html2img 的宿主 / 调试环境可以直接拿它复现。
+//! 装好 html2img 的宿主 / 调试环境可以直接拿它复现。data 里的回复 / 转帖 / 喜欢 /
+//! 查看四个数字是随机掷的，和真正出图时一样。
 //!
 //! ```bash
 //! # 直接给文案（`\n` 会换成真换行），默认输出 render-sample.json

@@ -4,12 +4,15 @@
 //! [`assets/card.html`](../../assets/card.html) 里（`<style>` + Vue 模板），
 //! 本模块只做三件事：
 //!
-//! 1. 把业务文案和宽度凑成 Vue 模板的 `data`（[JSON](serde_json::Value)）；
+//! 1. 把业务文案、宽度和互动数字凑成 Vue 模板的 `data`（[JSON](serde_json::Value)）；
 //! 2. 调宿主上的 html2img 服务（`vue: true`），拿本机图片路径；
 //! 3. 把错误翻译成插件层能展示的中文。
 //!
 //! 渲染器只有宿主那一份（hyper-render 的本地 fork：Blitz + Stylo + Taffy + Vello CPU），
 //! 插件不再链接 hyper-render，也不再自己拼 HTML 字符串。
+//!
+//! 互动区的四个数字是**装饰**：每次出图现掷，在 Rust 里格式化成 X 的中文计数后再交给模板
+//! （渲染器不执行 JS，模板只做插值）。
 //!
 //! html2img 是**硬依赖**（`Plugin::inject`）：没有它出不了图，插件停在 Pending
 //! 比启动后每条命令都失败更容易排查。
@@ -115,13 +118,155 @@ pub fn text_width(width: u32) -> u32 {
     content_width(width) * TEXT_WIDTH_NUM / TEXT_WIDTH_DEN
 }
 
-/// 卡片模板要的数据：正文 + 卡片宽度 + 内容列 / 正文的确定宽度（模板拼进 `style`）。
+/// 互动区的四个随机数字（原始值，模板里读到的是格式化后的字符串）。
+///
+/// 每次出图现掷：回复是四位数（带千分位），转帖 / 喜欢 / 查看在「万」上下浮动，
+/// 由 [`format_count`] 统一成 X 的中文计数（4,584 / 1.2万 / 12万 / 368万）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Counts {
+    /// 回复数：300–19,999，可能带千分位，也可能落到「万」。
+    pub reply: u64,
+    /// 转帖数：900–99,999，可能落到「万」。
+    pub repost: u64,
+    /// 喜欢数：4,000–999,999，多半是「万」。
+    pub like: u64,
+    /// 查看数：30,000–9,999,999，一定是「万」。
+    pub views: u64,
+}
+
+/// 随机掷一组互动数字。
+pub fn random_counts() -> Counts {
+    Counts {
+        reply: random_between(300, 19_999),
+        repost: random_between(900, 99_999),
+        like: random_between(4_000, 999_999),
+        views: random_between(30_000, 9_999_999),
+    }
+}
+
+/// 进程内递增序号：同一纳秒内连续出图时也给随机种子补一点熵。
+static RANDOM_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// 取一个 [min, max] 内的随机整数。
+///
+/// 不为了四个装饰数字引 rand：xorshift64* 的分布足够，种子混了时间、栈地址
+/// 和进程内序号，连续两次出图不会撞出同一组数字。
+fn random_between(min: u64, max: u64) -> u64 {
+    use std::sync::atomic::Ordering;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos() as u64)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+    let stack = &nanos as *const u64 as u64;
+    let seq = RANDOM_SEQ.fetch_add(1, Ordering::Relaxed);
+    let mut state =
+        nanos.rotate_left(17) ^ stack.rotate_left(31) ^ seq.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+
+    // xorshift64*：先推进状态，再乘一个奇数做输出混合。
+    state ^= state << 13;
+    state ^= state >> 7;
+    state ^= state << 17;
+    let value = state.wrapping_mul(0x2545_F491_4F6C_DD1D);
+    min + value % (max - min + 1)
+}
+
+/// 把互动数字格式化成 X 的中文计数：
+///
+/// - 小于 1 万：千分位（4,584）；
+/// - 1 万–10 万：一位小数的「万」，按 X 的做法截断不四舍五入（1.2万）；
+/// - 10 万以上：整数「万」（12万 / 368万）。
+pub fn format_count(value: u64) -> String {
+    if value < 10_000 {
+        let digits = value.to_string();
+        let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+        for (index, digit) in digits.chars().enumerate() {
+            if index > 0 && (digits.len() - index).is_multiple_of(3) {
+                out.push(',');
+            }
+            out.push(digit);
+        }
+        return out;
+    }
+
+    let wan = value / 10_000;
+    if wan >= 10 {
+        return format!("{wan}万");
+    }
+    // 1.0 万到 9.9 万：取一位小数，直接截断（19,258 → 1.9万，与 X 一致）。
+    let tenth = (value % 10_000) / 1_000;
+    if tenth == 0 {
+        format!("{wan}万")
+    } else {
+        format!("{wan}.{tenth}万")
+    }
+}
+
+/// 互动行的基准：800 宽卡片（内容列 613px）下图标 32px、数字 22px。
+const ACTION_ICON_AT_FULL: u32 = 32;
+const ACTION_FONT_AT_FULL: u32 = 22;
+/// 窄卡片的兜底下限：图标 / 数字再小就看不清了。
+const ACTION_ICON_MIN: u32 = 16;
+const ACTION_FONT_MIN: u32 = 10;
+/// 800 宽卡片的内容列宽度：互动行按它做等比缩放的基准。
+const ACTION_BASE_CONTENT: u32 = 613;
+
+/// 互动图标边长：跟随内容列宽度等比缩放，窄卡片不至于把数字挤出右边。
+pub fn action_icon_size(content_width: u32) -> u32 {
+    let scaled = content_width as u64 * ACTION_ICON_AT_FULL as u64 / ACTION_BASE_CONTENT as u64;
+    (scaled as u32).clamp(ACTION_ICON_MIN, ACTION_ICON_AT_FULL)
+}
+
+/// 互动数字的字号：按内容列宽度等比缩放，窄卡片保底 10px。
+///
+/// 不跟随图标算，是因为 460 的窄卡片上图标有 16px 下限，字号跟着图标会把
+/// 「19,999」这种最长的数字挤出四等分的格子；这里让字号比图标掉得更快一点。
+pub fn action_font_size(content_width: u32) -> u32 {
+    let scaled = content_width as u64 * ACTION_FONT_AT_FULL as u64 / ACTION_BASE_CONTENT as u64;
+    (scaled as u32).clamp(ACTION_FONT_MIN, ACTION_FONT_AT_FULL)
+}
+
+/// 数字与图标之间的间距。
+fn action_gap(icon: u32) -> u32 {
+    (icon / 4).max(3)
+}
+
+/// 右区（查看 / 书签 / 分享）内部的间距。
+fn action_cluster_gap(icon: u32) -> u32 {
+    (icon / 2).max(6)
+}
+
+/// 左区与右区之间的间距。
+fn action_cluster_margin(icon: u32) -> u32 {
+    (icon * 5 / 8).max(8)
+}
+
+/// 卡片模板要的数据：正文 + 卡片宽度 + 内容列 / 正文的确定宽度 +
+/// 互动区四个随机数字（已格式化）+ 互动行的缩放尺寸。
 pub fn view_data(content: &str, width: u32) -> Value {
+    view_data_with_counts(content, width, &random_counts())
+}
+
+/// 与 [`view_data`] 相同，但互动数字由调用方给（测试 / 示例用，方便复现）。
+pub fn view_data_with_counts(content: &str, width: u32, counts: &Counts) -> Value {
+    let column = content_width(width);
+    let icon = action_icon_size(column);
+    let font = action_font_size(column);
     json!({
         "content": content,
         "width": width,
-        "contentWidth": content_width(width),
+        "contentWidth": column,
         "textWidth": text_width(width),
+        "replyCount": format_count(counts.reply),
+        "repostCount": format_count(counts.repost),
+        "likeCount": format_count(counts.like),
+        "viewsCount": format_count(counts.views),
+        "actionIcon": icon,
+        "actionFont": font,
+        "actionGap": action_gap(icon),
+        "actionClusterGap": action_cluster_gap(icon),
+        "actionClusterMargin": action_cluster_margin(icon),
     })
 }
 
@@ -147,11 +292,72 @@ mod tests {
     }
 
     #[test]
-    fn view_data_exposes_definite_widths() {
-        let data = view_data("文案", 800);
+    fn view_data_exposes_definite_widths_and_counts() {
+        let counts = Counts {
+            reply: 4_584,
+            repost: 12_000,
+            like: 120_000,
+            views: 3_680_000,
+        };
+        let data = view_data_with_counts("文案", 800, &counts);
         assert_eq!(data["content"], "文案");
         assert_eq!(data["width"], 800);
         assert_eq!(data["contentWidth"], 613);
         assert_eq!(data["textWidth"], 582);
+        // 四个数字按 X 的中文计数格式化，模板只做插值。
+        assert_eq!(data["replyCount"], "4,584");
+        assert_eq!(data["repostCount"], "1.2万");
+        assert_eq!(data["likeCount"], "12万");
+        assert_eq!(data["viewsCount"], "368万");
+        // 800 宽是互动行的基准尺寸：图标 32 / 数字 22。
+        assert_eq!(data["actionIcon"], 32);
+        assert_eq!(data["actionFont"], 22);
+        assert_eq!(data["actionGap"], 8);
+        assert_eq!(data["actionClusterGap"], 16);
+        assert_eq!(data["actionClusterMargin"], 20);
+    }
+
+    #[test]
+    fn format_count_matches_x_chinese_counting() {
+        assert_eq!(format_count(0), "0");
+        assert_eq!(format_count(999), "999");
+        assert_eq!(format_count(1_000), "1,000");
+        assert_eq!(format_count(4_584), "4,584");
+        assert_eq!(format_count(9_999), "9,999");
+        // 1 万–10 万：一位小数，截断不四舍五入。
+        assert_eq!(format_count(10_000), "1万");
+        assert_eq!(format_count(12_000), "1.2万");
+        assert_eq!(format_count(19_258), "1.9万");
+        assert_eq!(format_count(99_999), "9.9万");
+        // 10 万以上：整数万。
+        assert_eq!(format_count(100_000), "10万");
+        assert_eq!(format_count(120_000), "12万");
+        assert_eq!(format_count(134_462), "13万");
+        assert_eq!(format_count(3_680_000), "368万");
+        assert_eq!(format_count(9_999_999), "999万");
+    }
+
+    #[test]
+    fn random_counts_stay_in_their_ranges() {
+        // 随机只影响观感：每种计数都必须落在模板能排下的范围内。
+        for _ in 0..64 {
+            let counts = random_counts();
+            assert!((300..=19_999).contains(&counts.reply));
+            assert!((900..=99_999).contains(&counts.repost));
+            assert!((4_000..=999_999).contains(&counts.like));
+            assert!((30_000..=9_999_999).contains(&counts.views));
+        }
+    }
+
+    #[test]
+    fn action_row_scales_down_for_narrow_cards() {
+        // 最窄 460：内容列 273，图标缩到下限 16、数字 10。
+        let column = content_width(MIN_WIDTH);
+        let icon = action_icon_size(column);
+        assert_eq!(icon, 16);
+        assert_eq!(action_font_size(column), 10);
+        assert_eq!(action_gap(icon), 4);
+        // 窄卡片的下限也不能大过内容列本身。
+        assert!(icon <= column);
     }
 }
