@@ -13,17 +13,32 @@ use url::Url;
 use crate::core::config::TelegraphConfig;
 use crate::galgame::Work;
 
-/// 建页；失败（含没配 token）返回 `None`（命令层只做「失败就停」）。
-pub fn create(work: &Work, config: &TelegraphConfig) -> Option<String> {
+/// 建页失败的原因，命令层据此区分「解析问题」和「创建问题」。
+#[derive(Debug)]
+pub enum Failure {
+    /// 没解析到任何内容（封面 / 视频 / 预览图全空），根本没发请求。
+    Empty,
+    /// 请求发出去了但失败，带底层原因。
+    Request(String),
+}
+
+/// 建页；失败返回原因（不再把错误吞掉）。
+pub fn create(work: &Work, config: &TelegraphConfig) -> Result<String, Failure> {
     // 空 token 打过去只会换回一个看不懂的 API 错误，先挡掉。
     if config.token.trim().is_empty() {
-        return None;
+        return Err(Failure::Request("未配置 telegraph_token".to_owned()));
     }
-    let content = serde_json::to_string(&nodes(work)).ok()?;
+    let page_nodes = nodes(work);
+    // 空内容发过去只会换回 CONTENT_TEXT_REQUIRED，直接判成解析问题。
+    if page_nodes.is_empty() {
+        return Err(Failure::Empty);
+    }
+    let content = serde_json::to_string(&page_nodes)
+        .map_err(|error| Failure::Request(format!("内容序列化失败: {error}")))?;
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .ok()?;
+        .map_err(|error| Failure::Request(format!("异步运行时创建失败: {error}")))?;
 
     let page = runtime.block_on(async {
         // 客户端必须在 runtime 里建：reqwest 的连接池要挂到 reactor 上。
@@ -35,11 +50,17 @@ pub fn create(work: &Work, config: &TelegraphConfig) -> Option<String> {
             .author_url(&config.author_url)
             .create()
             .await
-            .ok()?;
-        account.create_page(&work.title, &content, false).await.ok()
+            .map_err(|error| Failure::Request(format!("导入 Telegraph 账号失败: {error}")))?;
+        account
+            .create_page(&work.title, &content, false)
+            .await
+            .map_err(|error| Failure::Request(format!("createPage 失败: {error}")))
     })?;
 
-    (!page.url.is_empty()).then_some(page.url)
+    if page.url.is_empty() {
+        return Err(Failure::Request("createPage 返回了空地址".to_owned()));
+    }
+    Ok(page.url)
 }
 
 /// 页面内容：封面 → 视频 → 预览图画廊。

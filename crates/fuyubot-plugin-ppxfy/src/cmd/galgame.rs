@@ -115,13 +115,28 @@ fn flow(ctx: &Ctx, task: &Task, msg: Msg, text: &str) -> Result<(), String> {
 
     ctx.messenger
         .edit_text(tips.chat_id, tips.message_id, "🖼 正在创建 Telegraph 页面…");
-    let Some(telegraph) = telegraph::create(&work, &ctx.config.telegraph) else {
-        ctx.messenger.edit_text(
-            tips.chat_id,
-            tips.message_id,
-            "❌ Telegraph 页面创建失败，已中止。",
-        );
-        return Ok(());
+    let telegraph = match telegraph::create(&work, &ctx.config.telegraph) {
+        Ok(url) => url,
+        // 内容为空说明解析没拿到图：属于解析问题，根本没打 Telegraph 接口。
+        Err(telegraph::Failure::Empty) => {
+            ctx.error("ppxfy: 没解析到封面/预览图，跳过 Telegraph 建页");
+            ctx.messenger.edit_text(
+                tips.chat_id,
+                tips.message_id,
+                "❌ 没解析到封面/预览图，页面内容为空，已中止。\n这是解析问题（页面可能改版），不是 Telegraph 的问题。",
+            );
+            return Ok(());
+        }
+        // 发出去了但失败：把底层原因带出来，区分是接口/网络还是别的。
+        Err(telegraph::Failure::Request(reason)) => {
+            ctx.error(&format!("ppxfy: Telegraph 建页失败: {reason}"));
+            ctx.messenger.edit_text(
+                tips.chat_id,
+                tips.message_id,
+                &format!("❌ Telegraph 页面创建失败，已中止。\n原因: {reason}"),
+            );
+            return Ok(());
+        }
     };
     ctx.info(&format!("ppxfy: Telegraph 页面 {telegraph}"));
 
