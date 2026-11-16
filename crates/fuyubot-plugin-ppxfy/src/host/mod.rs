@@ -9,6 +9,7 @@
 //! 所以：回调只把更新丢进 channel，一个常驻 worker 线程负责路由，
 //! 每个命令再开一个短命线程跑完整流程（阻塞式下载 / 解压 / 打包）。
 
+pub mod command;
 pub mod messenger;
 pub mod progress;
 pub mod reply;

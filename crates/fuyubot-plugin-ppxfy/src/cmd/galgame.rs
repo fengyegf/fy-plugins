@@ -285,9 +285,11 @@ fn send_result(
 
     if let Some(path) = path {
         let caption = (length <= CAPTION_LIMIT).then_some(pieces);
+        // 成品分享是「主动发送」而不是对命令的回复：传 None，走普通消息；
+        // 否则 user 账户下宿主的 reply 会把用户发的命令消息改成这张图。
         match ctx
             .messenger
-            .send_photo(chat_id, &path, caption, info.blur_cover)
+            .send_photo(chat_id, &path, caption, info.blur_cover, None)
         {
             // 说明和正文一起发出去了，不用再发第二条。
             Ok(_) if caption.is_some() => {

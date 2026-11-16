@@ -2,6 +2,11 @@
 //!
 //! 所有方法都是**阻塞**的，只能在自己的业务线程里调用，绝不能在宿主回调里调。
 //! `args` 按 TDLib 原生字段名书写（`td_api.tl` 为准）。
+//!
+//! 两条发送通道，别混：
+//! - **命令回复**（有命令消息可回）走宿主的 `fuyubot.host.command` 服务：发新消息、
+//!   编辑原命令消息还是发 ephemeral，全由宿主按账户类型与触发者决定；
+//! - **主动发送**（没有命令消息可回，例如 panic 兜底）走 simplify 的 `send_message`。
 
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::{Value, json};
@@ -33,7 +38,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 const SEND_TIMEOUT_MS: u64 = 30_000;
 /// 上传超时：购图体积不大，但网络差时放宽。
 const UPLOAD_TIMEOUT_MS: u64 = 120_000;
-
 /// 消息网关。`HostApi` 是 `Copy`，可以直接放进结构体。
 #[derive(Debug, Clone)]
 pub struct Messenger {
@@ -99,16 +103,22 @@ impl Messenger {
         reply_to: Option<i64>,
         timeout_ms: u64,
     ) -> Result<Sent> {
-        let mut args = json!({
+        match reply_to {
+            // 回复某条命令消息：形态交给宿主，插件不拼 reply_to。
+            Some(message_id) => {
+                crate::host::command::reply(&self.host, chat_id, message_id, &content, timeout_ms)
+            }
+            // 主动发送：没有命令消息可回，仍然走 simplify 的 sendMessage。
+            None => self.send_new(chat_id, content, timeout_ms),
+        }
+    }
+
+    /// 主动发一条消息：没有命令消息可回时用，走 simplify 的 `sendMessage`。
+    fn send_new(&self, chat_id: i64, content: Value, timeout_ms: u64) -> Result<Sent> {
+        let args = json!({
             "chat_id": chat_id,
             "input_message_content": content,
         });
-        if let Some(message_id) = reply_to {
-            args["reply_to"] = json!({
-                "@type": "inputMessageReplyToMessage",
-                "message_id": message_id,
-            });
-        }
         let message = self.op("send_message", args, timeout_ms)?;
         Ok(Sent {
             chat_id,
@@ -142,11 +152,7 @@ impl Messenger {
         }
         let error = response.get("error").cloned().unwrap_or(Value::Null);
         Err(Error::Op {
-            code: error
-                .get("code")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown")
-                .to_owned(),
+            code: crate::host::command::reply_code(&error),
             message: error
                 .get("message")
                 .and_then(Value::as_str)

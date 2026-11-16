@@ -10,6 +10,7 @@
 //! 所以：回调只把更新丢进 channel，一个常驻 worker 线程负责解析与分发，
 //! 每条命令再开一个短命线程跑完整流程（系统信息采集 + TDLib 查询 + 渲染服务调用 + 上传）。
 
+pub mod command;
 pub mod messenger;
 pub mod worker;
 

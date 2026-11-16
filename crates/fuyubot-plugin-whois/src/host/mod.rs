@@ -8,7 +8,12 @@
 //!
 //! 所以：回调只把更新丢进 channel，一个常驻 worker 线程负责解析与分发，
 //! 每个命令再开一个短命线程跑完整流程（HTTP + 渲染 + 上传都是阻塞的）。
+//!
+//! 发送侧分两条通道：回复命令消息走 [`command`]（`fuyubot.host.command.reply`，
+//! 由宿主决定发新消息 / 编辑原命令 / ephemeral），主动推送走 [`messenger`] 的
+//! simplify `send_message`。
 
+pub mod command;
 pub mod messenger;
 pub mod worker;
 

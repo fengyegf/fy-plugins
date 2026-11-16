@@ -9,7 +9,7 @@
 //!   → GET /api/whois/ip/         // 失败不阻塞
 //!   → GET <domain>/favicon.ico   // 失败回退内置图标
 //!   → render::render_card()      // fuyubot.html2img 服务出图
-//!   → sendMessage({photo})       // host::messenger
+//!   → fuyubot.host.command.reply // host::command（发新消息 / 编辑原命令 / ephemeral 由宿主定）
 //!   → 删除 html2img 产物
 //! ```
 //!

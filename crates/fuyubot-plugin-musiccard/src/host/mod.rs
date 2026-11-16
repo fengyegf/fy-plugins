@@ -10,6 +10,7 @@
 //! 所以：回调只把更新丢进 channel，一个常驻路由线程负责解析，每条命令再开一个
 //! 短命业务线程跑完整流程（阻塞式取歌 / 调 html2img 渲染 / 上传）。
 
+pub mod command;
 pub mod messenger;
 pub mod worker;
 

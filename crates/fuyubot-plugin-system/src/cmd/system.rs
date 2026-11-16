@@ -10,7 +10,7 @@
 //!   → getConfig("admin").super_admin → getUser(admin) + 头像  // 配置 + TDLib
 //!   → pluginManager.getPlugins()      // 宿主 list_plugins
 //!   → render::render_card(card, …)    // Vue 模板 + data → 宿主 fuyubot.html2img
-//!   → sendMessage({photo})            // host::messenger
+//!   → send_photo（回复走宿主 fuyubot.host.command）  // host::messenger
 //!   → 删除渲染产物
 //! ```
 //!
@@ -199,7 +199,10 @@ fn build_and_render(ctx: &Ctx) -> Result<PathBuf, String> {
     .map_err(|error| error.to_string())
 }
 
-/// 以照片回复，然后删掉 html2img 的渲染产物。
+/// 以照片回复命令消息，然后删掉 html2img 的渲染产物。
+///
+/// 带 `Some(msg.id)` 的发送走宿主的 `fuyubot.host.command`：发新消息 + `reply_to`、
+/// 编辑原命令消息还是 ephemeral 全由宿主决定，插件不自己拼 `reply_to`。
 fn send(ctx: &Ctx, msg: Msg, path: &Path) {
     let sent = ctx.messenger.send_photo(msg.chat_id, path, Some(msg.id));
 

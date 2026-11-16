@@ -1,7 +1,20 @@
-//! 消息网关：把 ABI v6 的 `simplify` 操作包成几个直白的方法。
+//! 消息网关：把 ABI v6 的两条发送通道包成几个直白的方法。
 //!
-//! 所有方法都是**阻塞**的：先用 `simplify_invoke` 拿到请求号，再在 `response`
-//! 通道上等这个请求号的结果，因此只能在自己的业务线程里调用。
+//! 两条通道分工明确（见 `docs/abi-v6-spec.md` 第 4 条）：
+//!
+//! - **回复某条命令消息**（`reply_to = Some(message_id)`）：走宿主的
+//!   [`fuyubot.host.command`](super::command) `reply`，由宿主决定是「发新消息并挂
+//!   `reply_to`」、「编辑原命令消息」，还是「群里的 ephemeral 消息」。插件**不再自己**
+//!   把 `chat_id` / `reply_to` 拼进 `sendMessage` 参数。
+//! - **主动推送**（`reply_to = None`，比如任务 panic 时的内部错误提示）：没有命令消息
+//!   可回，继续走 simplify 的 `send_message`。
+//!
+//! 本插件没有相册发送；将来若要发 `sendMessageAlbum`，必须留在 simplify
+//! `send_message` 这一侧——`fuyubot.host.command.reply` 只收单条
+//! `input_message_content`，表达不了相册。
+//!
+//! 两条通道都是**阻塞**的（simplify 要等 `response` 更新，`call_service` 要等 TDLib
+//! 回包），因此只能在自己的业务线程里调用，不能在 `updateNewMessage` 回调里调。
 //!
 //! 图片上传走 TDLib 的「上传本地照片」分支：`inputPhoto` 里塞 `inputFileLocal`，
 //! 宽高交给服务器替换（客户端拿不到真图尺寸，也不必为了它再解一遍图片）。
@@ -10,6 +23,8 @@
 
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::{Value, json};
+
+use super::command;
 
 /// 普通消息超时。
 const SEND_TIMEOUT_MS: u64 = 30_000;
@@ -46,13 +61,13 @@ impl Messenger {
         Self { host }
     }
 
-    /// 发送一条纯文本消息，`reply_to` 填消息 id 即「回复」。
+    /// 发送一条纯文本消息；`reply_to` 填命令消息 id 即「回复那条命令」。
     pub fn send_text(&self, chat_id: i64, text: &str, reply_to: Option<i64>) -> Result<Sent> {
         let content = json!({
             "@type": "inputMessageText",
             "text": { "@type": "formattedText", "text": text, "entities": [] },
         });
-        self.send_content(chat_id, content, reply_to)
+        self.send(chat_id, content, reply_to, SEND_TIMEOUT_MS)
     }
 
     /// 发送一条纯文本消息，失败只记日志、返回 `None`。
@@ -83,32 +98,35 @@ impl Messenger {
                 "height": 0,
             },
         });
-        let mut args = json!({ "chat_id": chat_id, "input_message_content": content });
-        if let Some(message_id) = reply_to {
-            args["reply_to"] = json!({
-                "@type": "inputMessageReplyToMessage",
-                "message_id": message_id,
-            });
-        }
-        let message = self.op("send_message", args, UPLOAD_TIMEOUT_MS)?;
-        Ok(Sent {
-            chat_id,
-            message_id: message.get("id").and_then(Value::as_i64).unwrap_or(0),
-        })
+        self.send(chat_id, content, reply_to, UPLOAD_TIMEOUT_MS)
     }
 
-    fn send_content(&self, chat_id: i64, content: Value, reply_to: Option<i64>) -> Result<Sent> {
-        let mut args = json!({ "chat_id": chat_id, "input_message_content": content });
-        if let Some(message_id) = reply_to {
-            args["reply_to"] = json!({
-                "@type": "inputMessageReplyToMessage",
-                "message_id": message_id,
-            });
-        }
-        let message = self.op("send_message", args, SEND_TIMEOUT_MS)?;
+    /// 两条通道的唯一分叉点。
+    ///
+    /// - 有命令消息可回：交给宿主 `fuyubot.host.command.reply`，内容之外的东西
+    ///   （`chat_id` / `reply_to` / 编辑 / ephemeral）全由宿主决定；
+    /// - 没有命令消息（主动推送）：simplify `send_message`，此时 `chat_id` 是唯一
+    ///   的投递目标，本来就得由插件自己给。
+    fn send(
+        &self,
+        chat_id: i64,
+        content: Value,
+        reply_to: Option<i64>,
+        timeout_ms: u64,
+    ) -> Result<Sent> {
+        let message = match reply_to {
+            Some(message_id) => {
+                command::reply(&self.host, chat_id, message_id, &content, timeout_ms)?
+            }
+            None => self.op(
+                "send_message",
+                json!({ "chat_id": chat_id, "input_message_content": content }),
+                timeout_ms,
+            )?,
+        };
         Ok(Sent {
             chat_id,
-            message_id: message.get("id").and_then(Value::as_i64).unwrap_or(0),
+            message_id: message_id_of(&message),
         })
     }
 
@@ -149,5 +167,21 @@ impl Messenger {
                 .unwrap_or("未提供错误信息")
                 .to_owned(),
         })
+    }
+}
+
+/// 最终 `Message` 的 `id`。宿主没给就记 0：只影响日志里的定位信息，不影响发送结果。
+fn message_id_of(message: &Value) -> i64 {
+    message.get("id").and_then(Value::as_i64).unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_message_id_degrades_to_zero() {
+        assert_eq!(message_id_of(&json!({ "@type": "message", "id": 42 })), 42);
+        assert_eq!(message_id_of(&json!({ "@type": "message" })), 0);
     }
 }

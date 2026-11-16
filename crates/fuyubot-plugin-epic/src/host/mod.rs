@@ -3,6 +3,7 @@
 //! 线程模型沿用 ppxfy：宿主回调只把更新丢进 channel（它在 TDLib 接收线程上，不能阻塞），
 //! 一个常驻 worker 线程负责路由，命令再各起一条短命线程跑完整流程。
 
+pub mod command;
 pub mod messenger;
 pub mod worker;
 

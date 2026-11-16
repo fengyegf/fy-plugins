@@ -57,6 +57,7 @@ pub fn run(ctx: Arc<Ctx>, job: Job) {
         guard.error(&format!(
             "whois: 任务线程 panic（chat={chat_id}）: {reason}"
         ));
+        // 这里没有可回复的命令消息（panic 位置不确定），按主动推送走 simplify send_message。
         guard
             .messenger
             .try_send_text(chat_id, &format!("❌ 内部错误，查询失败：{reason}"), None);

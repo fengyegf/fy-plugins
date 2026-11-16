@@ -1,9 +1,19 @@
-//! 消息收发：把 ABI v6 的 `simplify` 操作表包成几个直白的方法。
+//! 消息收发：两条发送通道 + 编辑 / 删除，包成几个直白的方法。
 //!
-//! 所有方法都是**阻塞**的：先用 `simplify_invoke` 拿到请求号，再在 `response`
-//! 通道上等这个请求号的结果。因此只能在自己的业务线程里调用，绝不能在宿主回调里调。
+//! 两条通道，别混（ABI v6）：
 //!
-//! `args` 一律按 TDLib 原生字段名书写（`td_api.tl` 为准），详见
+//! - **命令回复**（有命令消息可回，即 `reply_to = Some(message_id)`）走宿主的
+//!   `fuyubot.host.command` 服务（见 [`super::command`]）：发新消息、编辑原命令还是
+//!   发 ephemeral，全由宿主按账户类型与触发者决定；插件**不再自己拼** `chat_id` /
+//!   `reply_to` 的 `sendMessage`。
+//! - **主动发送**（没有命令消息可回：相册、分卷上传、panic 兜底）走 simplify 的
+//!   `send_message`。
+//!
+//! 所有方法都是**阻塞**的：命令回复等宿主同步返回，simplify 先用 `simplify_invoke`
+//! 拿请求号、再在 `response` 通道等结果。因此只能在自己的业务线程里调用，
+//! 绝不能在宿主回调里调。
+//!
+//! simplify 的 `args` 一律按 TDLib 原生字段名书写（`td_api.tl` 为准），详见
 //! `fuyubot-sdk td-method sendMessage`。
 
 use std::collections::HashMap;
@@ -12,6 +22,8 @@ use std::sync::{Arc, Mutex};
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::{Value, json};
 use thiserror::Error;
+
+use super::command;
 
 /// 一次发送得到的消息定位信息。
 #[derive(Debug, Clone, Copy)]
@@ -165,6 +177,9 @@ fn document_content(path: &std::path::Path) -> Value {
     })
 }
 
+/// 普通消息 / 文本命令回复的超时。
+const SEND_TIMEOUT_MS: u64 = 30_000;
+
 /// 上传超时：大分卷动辄几个 GB，比普通消息放宽得多。
 const UPLOAD_TIMEOUT_MS: u64 = 1_800_000;
 
@@ -190,19 +205,24 @@ impl Messenger {
         }
     }
 
-    /// 发送一条纯文本消息，`reply_to` 填消息 id 即「回复」。
+    /// 发送一条纯文本消息，`reply_to` 填消息 id 即「回复某条命令」。
     pub fn send_text(&self, chat_id: i64, text: &str, reply_to: Option<i64>) -> Result<Sent> {
-        self.send_content(chat_id, text_content(text), reply_to)
+        self.send_content(chat_id, text_content(text), reply_to, SEND_TIMEOUT_MS)
     }
 
     /// 发送一条纯文本消息，失败只记日志、返回 `None`。
     pub fn try_send_text(&self, chat_id: i64, text: &str, reply_to: Option<i64>) -> Option<Sent> {
-        self.try_send_content(chat_id, text_content(text), reply_to)
+        self.try_send_content(chat_id, text_content(text), reply_to, SEND_TIMEOUT_MS)
     }
 
     /// 发送一条带样式的消息（加粗 / 引用块 / 链接 / 行内代码）。
     pub fn send_styled(&self, chat_id: i64, pieces: &[Piece]) -> Result<Sent> {
-        self.send_content(chat_id, content(formatted_text(pieces)), None)
+        self.send_content(
+            chat_id,
+            content(formatted_text(pieces)),
+            None,
+            SEND_TIMEOUT_MS,
+        )
     }
 
     /// 发送一条带样式的消息，失败只记日志、返回 `None`。
@@ -212,7 +232,12 @@ impl Messenger {
         pieces: &[Piece],
         reply_to: Option<i64>,
     ) -> Option<Sent> {
-        self.try_send_content(chat_id, content(formatted_text(pieces)), reply_to)
+        self.try_send_content(
+            chat_id,
+            content(formatted_text(pieces)),
+            reply_to,
+            SEND_TIMEOUT_MS,
+        )
     }
 
     fn try_send_content(
@@ -220,8 +245,9 @@ impl Messenger {
         chat_id: i64,
         content: Value,
         reply_to: Option<i64>,
+        timeout_ms: u64,
     ) -> Option<Sent> {
-        match self.send_content(chat_id, content, reply_to) {
+        match self.send_content(chat_id, content, reply_to, timeout_ms) {
             Ok(sent) => Some(sent),
             Err(error) => {
                 self.host.warn(&format!("ppxfy: 发送消息失败: {error}"));
@@ -230,18 +256,48 @@ impl Messenger {
         }
     }
 
-    fn send_content(&self, chat_id: i64, content: Value, reply_to: Option<i64>) -> Result<Sent> {
-        let mut args = json!({
+    /// 两条通道的分流点：有命令消息可回就交给宿主，否则自己发新消息。
+    fn send_content(
+        &self,
+        chat_id: i64,
+        content: Value,
+        reply_to: Option<i64>,
+        timeout_ms: u64,
+    ) -> Result<Sent> {
+        match reply_to {
+            // 回复某条命令消息：形态交给宿主（新消息 + reply_to / 编辑原命令 / ephemeral），
+            // 插件不再自己拼 `reply_to` 与 `sendMessage`。
+            Some(message_id) => self.reply_to_command(chat_id, message_id, content, timeout_ms),
+            // 主动发送：没有命令消息可回，走 simplify 的 `sendMessage`。
+            None => self.send_new(chat_id, content, timeout_ms),
+        }
+    }
+
+    /// 回复一条命令消息（`fuyubot.host.command` 的 `reply`，见 [`command`]）。
+    ///
+    /// 宿主当场等 TDLib 的最终 `Message`（最多 `timeout_ms`），失败以
+    /// `{"@type":"error",…}` 回来并映射成 [`Error::Op`]。
+    fn reply_to_command(
+        &self,
+        chat_id: i64,
+        message_id: i64,
+        content: Value,
+        timeout_ms: u64,
+    ) -> Result<Sent> {
+        let message = command::reply(&self.host, chat_id, message_id, content, timeout_ms)?;
+        Ok(Sent {
+            chat_id,
+            message_id: message.get("id").and_then(Value::as_i64).unwrap_or(0),
+        })
+    }
+
+    /// 主动发一条消息：没有命令消息可回时用（相册 / 上传 / 兜底提示），走 simplify。
+    fn send_new(&self, chat_id: i64, content: Value, timeout_ms: u64) -> Result<Sent> {
+        let args = json!({
             "chat_id": chat_id,
             "input_message_content": content,
         });
-        if let Some(message_id) = reply_to {
-            args["reply_to"] = json!({
-                "@type": "inputMessageReplyToMessage",
-                "message_id": message_id,
-            });
-        }
-        let message = self.op("send_message", args, 30_000)?;
+        let message = self.op("send_message", args, timeout_ms)?;
         Ok(Sent {
             chat_id,
             message_id: message.get("id").and_then(Value::as_i64).unwrap_or(0),
@@ -279,7 +335,7 @@ impl Messenger {
             "message_id": message_id,
             "input_message_content": content,
         });
-        match self.op("edit_message_text", args, 30_000) {
+        match self.op("edit_message_text", args, SEND_TIMEOUT_MS) {
             Ok(_) => {}
             // 并发下仍可能撞上「内容其实没变」，属于正常现象，不必刷日志。
             Err(Error::Op { message, .. }) if message.contains("MESSAGE_NOT_MODIFIED") => {
@@ -307,12 +363,15 @@ impl Messenger {
             "message_ids": message_ids,
             "revoke": true,
         });
-        if let Err(error) = self.op("delete_messages", args, 30_000) {
+        if let Err(error) = self.op("delete_messages", args, SEND_TIMEOUT_MS) {
             self.host.warn(&format!("ppxfy: 删除消息失败: {error}"));
         }
     }
 
     /// 以文件（document）形式上传一个本地文件。上传耗时远大于普通消息，超时放宽。
+    ///
+    /// 这里**故意**走 simplify 的 `send_message`：分卷是流程产物，不是「回复某条命令」，
+    /// 没有命令消息可回，宿主的命令回复通道不适用。
     pub fn send_document(&self, chat_id: i64, path: &std::path::Path) -> Result<Sent> {
         let args = json!({
             "chat_id": chat_id,
@@ -327,6 +386,9 @@ impl Messenger {
 
     /// 以照片形式发一条消息：本地文件 + 可选说明（带样式）+ 可选剧透遮罩。
     ///
+    /// `reply_to = Some(message_id)` 表示这张图是对某条命令的回复，此时走宿主命令回复
+    /// 通道（超时按上传放宽）；`None` 则是主动发送，走 simplify。
+    ///
     /// 这是 TDLib 的「上传本地照片」分支：`inputPhoto` 里塞 `inputFileLocal`，
     /// 宽高交给服务器替换（客户端拿不到真图尺寸，也不必为了它去解一遍图片）。
     pub fn send_photo(
@@ -335,6 +397,7 @@ impl Messenger {
         path: &std::path::Path,
         caption: Option<&[Piece]>,
         spoiler: bool,
+        reply_to: Option<i64>,
     ) -> Result<Sent> {
         let mut content = json!({
             "@type": "inputMessagePhoto",
@@ -349,21 +412,16 @@ impl Messenger {
         if let Some(pieces) = caption {
             content["caption"] = formatted_text(pieces);
         }
-        let args = json!({
-            "chat_id": chat_id,
-            "input_message_content": content,
-        });
-        let message = self.op("send_message", args, UPLOAD_TIMEOUT_MS)?;
-        Ok(Sent {
-            chat_id,
-            message_id: message.get("id").and_then(Value::as_i64).unwrap_or(0),
-        })
+        self.send_content(chat_id, content, reply_to, UPLOAD_TIMEOUT_MS)
     }
 
     /// 以相册（媒体组）形式一次上传 2–10 个文件。
     ///
     /// 走 `send_message_album`（`sendMessageAlbum`）：整组共用一个超时预算、逐项等
     /// 发送结局，任一项失败即返回错误。调用方负责把条数控制在 2–10。
+    ///
+    /// 相册**继续走 simplify**：宿主的命令回复通道一次只接一条
+    /// `input_message_content`；何况分卷是流程产物，本来就没有命令消息可回。
     pub fn send_album(&self, chat_id: i64, paths: &[std::path::PathBuf]) -> Result<()> {
         debug_assert!((2..=10).contains(&paths.len()), "相册只能是 2–10 个文件");
         let contents: Vec<Value> = paths.iter().map(|path| document_content(path)).collect();

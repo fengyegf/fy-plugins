@@ -9,6 +9,7 @@
 //! 所以：回调只把更新丢进 channel，一个常驻 worker 线程负责解析与分发，
 //! 每个命令再开一个短命线程跑完整流程（HTTP + 渲染 + 上传都是阻塞的）。
 
+pub mod command;
 pub mod messenger;
 pub mod worker;
 
