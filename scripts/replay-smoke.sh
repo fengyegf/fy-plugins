@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 离线回放冒烟（不接账号、不连 TDLib）：把本仓刚编出来的 6 个插件 + 宿主安装目录里的
+# 离线回放冒烟（不接账号、不连 TDLib）：把本仓刚编出来的 7 个插件 + 宿主安装目录里的
 # html2img（卡片渲染的硬依赖）装进临时插件目录，再用给定宿主跑一遍 --replay。
 #
 # 用法：scripts/replay-smoke.sh <fuyubot 安装目录> [replay.json]
@@ -36,15 +36,16 @@ stage kfc       kfc.dll       kfc.dll
 stage musiccard musiccard.dll bin/musiccard.dll
 stage ppxfy     ppxfy.dll     ppxfy.dll
 stage system    system.dll    system.dll
+stage trending  trending.dll  trending.dll
 stage whois     whois.dll     whois.dll
 
-# html2img 是 epic / kfc / musiccard / system / whois 的硬依赖（不在本仓），从宿主目录借一份；
+# html2img 是 epic / kfc / musiccard / system / trending / whois 的硬依赖（不在本仓），从宿主目录借一份；
 # fuyubot.mongo 是 ppxfy 的可选软依赖，一并带上，缺了也不影响启动。
 for bundle in "$HOST_DIR"/plugins/fuyubot.html2img*/ "$HOST_DIR"/plugins/fuyubot.mongo/; do
   if [ -d "$bundle" ]; then cp -r "$bundle" "$OUT/plugins/"; fi
 done
 if ! ls -d "$OUT"/plugins/fuyubot.html2img* >/dev/null 2>&1; then
-  echo "警告：宿主目录里没有 fuyubot.html2img，epic / kfc / musiccard / system / whois 的卡片渲染会失败"
+  echo "警告：宿主目录里没有 fuyubot.html2img，epic / kfc / musiccard / system / trending / whois 的卡片渲染会失败"
 fi
 
 echo "== 回放 $REPLAY（不接 TDLib，请求只留档）"

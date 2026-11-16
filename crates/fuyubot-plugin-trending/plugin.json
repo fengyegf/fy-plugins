@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "trending",
+  "name": "GitHub Trending",
+  "version": "0.1.0",
+  "kind": "native",
+  "entry": "trending.dll",
+  "abi": 6,
+  "platforms": [
+    "windows-x86_64",
+    "linux-x86_64",
+    "macos-aarch64",
+    "android-aarch64",
+    "android-x86_64"
+  ],
+  "description": "抓取 GitHub Trending 今日 / 本周 / 本月榜单，渲染成 4 列卡片墙并以图片回复。"
+}

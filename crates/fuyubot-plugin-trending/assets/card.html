@@ -1,0 +1,72 @@
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#0d1117;color:#e6edf3;font-family:'Segoe UI','Microsoft YaHei','Microsoft YaHei UI','Noto Sans CJK SC','PingFang SC',sans-serif}
+.wall{display:flex;flex-direction:column;padding:32px;background:#0d1117}
+.titlebar{display:flex;flex-direction:column;align-items:center}
+.title{font-size:34px;font-weight:800;letter-spacing:-0.4px;line-height:42px;color:#f0f6fc}
+.subrow{display:flex;align-items:center;justify-content:space-between;width:100%;height:32px;margin-top:16px}
+.subtitle{font-size:12px;line-height:16px;letter-spacing:0.2px;color:#6e7681}
+.badge{display:flex;align-items:center;justify-content:center;height:32px;padding:0 16px;border-radius:10px;background:#f0f6fc;font-size:13px;font-weight:700;letter-spacing:0.4px;color:#0d1117}
+.cards{display:flex;flex-wrap:wrap;gap:16px;margin-top:26px}
+.card{display:flex;flex-direction:column;padding:16px;border-radius:16px;border:1px solid #21262d;background:#161b22}
+.chead{display:flex;align-items:flex-start}
+.avatar{display:flex;align-items:center;justify-content:center;width:40px;height:40px;flex:none;border-radius:11px;overflow:hidden;background:#1f2733}
+.avatar img{display:block;width:40px;height:40px}
+.initial{display:flex;align-items:center;justify-content:center;width:40px;height:40px;font-size:16px;font-weight:700;line-height:40px;color:#f0f6fc;background:#1f2733}
+.names{display:flex;flex-direction:column;flex:1;min-width:0;margin-left:12px;padding-top:1px}
+.repo{font-size:16px;font-weight:700;line-height:20px;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.owner{margin-top:3px;font-size:11.5px;line-height:14px;color:#7d8590;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rank{flex:none;margin-left:8px;font-size:10.5px;font-weight:600;line-height:20px;letter-spacing:0.6px;color:#4a5766}
+.desc{height:40px;margin-top:12px;font-size:13px;line-height:20px;color:#9198a1;overflow:hidden}
+.rule{height:1px;margin-top:13px;background:#21262d}
+.cfoot{display:flex;align-items:center;justify-content:space-between;height:20px;margin-top:12px}
+.stats{display:flex;align-items:center;flex:1;min-width:0;overflow:hidden}
+.stat{display:flex;align-items:center;margin-right:10px;font-size:12px;line-height:16px;white-space:nowrap;color:#8b949e}
+.stat.last{margin-right:0}
+.icon{display:flex;align-items:center;margin-right:3px}
+.val{margin-left:0}
+.gain{font-weight:700;color:#3fb950}
+.gain .per{margin-left:2px;font-size:11px;font-weight:500;color:#2ea043}
+.lang{display:flex;align-items:center;flex:none;max-width:110px;margin-left:6px;font-size:12px;line-height:16px;overflow:hidden;color:#8b949e}
+.dot{width:9px;height:9px;flex:none;border-radius:50%;margin-right:5px}
+.lname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foot{display:flex;justify-content:center;margin-top:26px;font-size:12px;line-height:16px;letter-spacing:0.2px;color:#57606a}
+</style>
+<div class="wall" :style="'width:' + (width || 1600) + 'px'">
+  <div class="titlebar">
+    <div class="title">GitHub Trending</div>
+  </div>
+  <div class="subrow">
+    <div class="subtitle">{{ window_label }} · {{ count }} 个仓库 · 更新于 {{ fetched_at }}</div>
+    <div class="badge">{{ period }}</div>
+  </div>
+  <div class="cards">
+    <div v-for="item in items" class="card" :style="'width:' + (card_width || 372) + 'px'">
+      <div class="chead">
+        <div class="avatar">
+          <img v-if="item.avatar" :src="item.avatar" alt="" />
+          <div v-else class="initial">{{ item.initial }}</div>
+        </div>
+        <div class="names">
+          <div class="repo">{{ item.name }}</div>
+          <div class="owner">{{ item.owner }}</div>
+        </div>
+        <div class="rank">{{ item.rank_label }}</div>
+      </div>
+      <div class="desc">{{ item.desc }}</div>
+      <div class="rule"></div>
+      <div class="cfoot">
+        <div class="stats">
+          <span class="stat"><span class="icon"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16" fill="#8b949e"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg></span><span class="val">{{ item.stars_short }}</span></span>
+          <span class="stat gain"><span class="val">{{ item.gain }}</span><span class="per">{{ period }}</span></span>
+          <span class="stat last"><span class="icon"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16" fill="#8b949e"><path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"/></svg></span><span class="val">{{ item.forks_short }}</span></span>
+        </div>
+        <div class="lang">
+          <span class="dot" :style="'background:' + item.lang_color"></span>
+          <span class="lname">{{ item.lang }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">数据来源 github.com/trending · {{ period_en }} 榜单</div>
+</div>

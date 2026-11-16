@@ -1,0 +1,25 @@
+# trending：GitHub Trending 榜单卡片插件。
+#
+# 同时产出 cdylib（宿主 dlopen 的插件动态库）与 rlib（cargo test / examples 可用）。
+[package]
+name = "fuyubot-plugin-trending"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "抓取 GitHub Trending 今日 / 本周 / 本月榜单，渲染成 4 列卡片墙并以图片回复"
+
+[lib]
+# 动态库文件名跟着 lib name 走：trending.dll / libtrending.so。
+name = "trending"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fuyubot-plugin-api.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# 阻塞式 HTTP：抓 github.com/trending 的 HTML 在本插件的业务线程里跑。
+ureq.workspace = true
+# 仓库作者头像：解码 GitHub 的 PNG/JPEG 头像，缩到 40px 再编码成 PNG。
+image = { workspace = true, features = ["png", "jpeg"] }
+# 把 40px PNG 编码成 `data:image/png;base64,…` 塞进模板。
+base64 = "0.22"

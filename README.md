@@ -19,10 +19,11 @@
 | `kfc` | `crates/fuyubot-plugin-kfc` | 0.1.5 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `kfc.dll` |
 | `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.5 | Windows / Linux / macOS（**不含 Android**） | `ppxfy.dll` |
 | `system` | `crates/fuyubot-plugin-system` | 0.1.4 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
+| `trending` | `crates/fuyubot-plugin-trending` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `trending.dll` |
 
 平台列表的唯一来源是各 crate 的 `plugin.json`；发布流水线按它生成构建矩阵。
 
-> **图像生成**：`epic` / `kfc` / `musiccard` / `system` / `whois` 的卡片图统一由宿主上的
+> **图像生成**：`epic` / `kfc` / `musiccard` / `system` / `trending` / `whois` 的卡片图统一由宿主上的
 > [`fuyubot.html2img`](https://github.com/xiaoqvan/fuyubot-plugins/tree/main/crates/fuyubot-plugin-html2img)
 > 插件渲染（`host.call_service("fuyubot.html2img", "render", …)`）：每个插件的卡片界面是
 > `assets/card.html` 里的 **Vue 模板 + 内联 CSS**，Rust 只负责把业务数据凑成 `data`，
@@ -41,6 +42,12 @@
 | `linux-x86_64` | GitHub Actions `verify-platforms`（ubuntu-latest） | 6/6 通过 |
 | `macos-aarch64` | GitHub Actions `verify-platforms`（macos-15） | 6/6 通过 |
 | `android-aarch64` / `android-x86_64` | 本机 NDK 27.2 + `cargo ndk` + `package.py`（whois / musiccard / epic / kfc / system） | 10/10 通过 |
+
+> `trending`（GitHub Trending 榜单卡片）是后加的，只做过本机验证：
+> `cargo build --release` + `scripts/check_abi.py`（ABI 符号 7/7）+
+> `scripts/package.py --platform windows-x86_64`，并在宿主 `fuyubot 0.1.6` +
+> `fuyubot.html2img 0.1.2` 的离线回放里真实出图（今日 / 本周 / 本月三档、1600px 与
+> 1200px 两档宽度）。它还没进上面那批多平台验证，也没跑过真机。
 
 验证记录：<https://github.com/fengyegf/fy-plugins/actions/runs/42824916393>。
 上面的验证是 ABI v5 时期跑的；迁到 ABI v6 后，只有构建/打包结论仍然成立，宿主加载
