@@ -1,0 +1,46 @@
+[
+  {
+    "@type": "updateNewMessage",
+    "message": {
+      "@type": "message",
+      "id": 201,
+      "chat_id": 7770002,
+      "is_outgoing": false,
+      "date": 0,
+      "sender_id": {
+        "@type": "messageSenderUser",
+        "user_id": 42
+      },
+      "content": {
+        "@type": "messageText",
+        "text": {
+          "@type": "formattedText",
+          "text": "/help",
+          "entities": []
+        }
+      }
+    }
+  },
+  {
+    "@type": "updateNewMessage",
+    "message": {
+      "@type": "message",
+      "id": 202,
+      "chat_id": 7770002,
+      "is_outgoing": false,
+      "date": 0,
+      "sender_id": {
+        "@type": "messageSenderUser",
+        "user_id": 42
+      },
+      "content": {
+        "@type": "messageText",
+        "text": {
+          "@type": "formattedText",
+          "text": "/cancel",
+          "entities": []
+        }
+      }
+    }
+  }
+]

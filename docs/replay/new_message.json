@@ -1,0 +1,46 @@
+[
+  {
+    "@type": "updateNewMessage",
+    "message": {
+      "@type": "message",
+      "id": 101,
+      "chat_id": 7770001,
+      "is_outgoing": false,
+      "date": 0,
+      "sender_id": {
+        "@type": "messageSenderUser",
+        "user_id": 42
+      },
+      "content": {
+        "@type": "messageText",
+        "text": {
+          "@type": "formattedText",
+          "text": "/system",
+          "entities": []
+        }
+      }
+    }
+  },
+  {
+    "@type": "updateNewMessage",
+    "message": {
+      "@type": "message",
+      "id": 102,
+      "chat_id": 7770001,
+      "is_outgoing": false,
+      "date": 0,
+      "sender_id": {
+        "@type": "messageSenderUser",
+        "user_id": 42
+      },
+      "content": {
+        "@type": "messageText",
+        "text": {
+          "@type": "formattedText",
+          "text": "/kfc",
+          "entities": []
+        }
+      }
+    }
+  }
+]

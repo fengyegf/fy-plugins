@@ -47,6 +47,11 @@
 需要新版（ABI v6）的 `fuyubot-sdk` / FuyuBot 才能验证——本机附带的
 `fuyubot-sdk.exe` 还是 ABI v5，不能再用来 check ABI v6 插件。
 
+没有 ABI v6 的 SDK 也能自己核对导出符号：`python scripts/check_abi.py target/debug/*.dll`
+静态读 PE 导出表，检查七个 ABI 符号（不 dlopen、不执行插件代码）。本次 ABI v6 审计与
+`/help` 联动改造的结论见 [`AUDIT-ABI-V6.md`](AUDIT-ABI-V6.md)，统一口径见
+[`docs/abi-v6-spec.md`](docs/abi-v6-spec.md)。
+
 **能打包的**：`plugin.json` 里声明、并且已经构建出动态库的平台组合。
 
 **不能打包的**：
@@ -78,6 +83,9 @@ vendor/
 scripts/
   package.py                 # 打一个平台一个插件的 bundle ZIP
   plan.py                    # 由 plugin.json 计算发布矩阵（CI 用）
+  check_abi.py               # 静态核对 dylib 的七个 ABI 符号（ABI v6）
+docs/
+  abi-v6-spec.md             # ABI v6 五条契约 + /help 联动的统一口径
 .github/workflows/
   ci.yml                     # fmt + clippy
   release.yml                # <id>-v<version> tag → 多平台构建 → Release
