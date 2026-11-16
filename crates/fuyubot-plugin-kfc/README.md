@@ -75,17 +75,33 @@ html2img 自己的全局配置（`[plugin.fuyubot.html2img]`）决定它的默�
 
 ## 与 `/help` 的联动
 
-插件在 `start()` 里通过进程级共享服务 `fuyubot.help.commands` 的 `register`
-方法，把 `/kfc` 登记进内置 `/help`，用户发 `/help` 就能看到这条命令。
+FuyuBot 0.1.5 起**命令表归宿主**：宿主预置了进程级服务 `fuyubot.host.commands`，
+其它插件的 `/help` 只是这张表的读取方（`fuyubot.host.commands.list`）。插件在
+`start()` 里调它的 `register`，把 `/kfc` 连同 `role` / `scopes` / `hidden` 一起登记：
 
-依赖用 `soft_inject` 声明（写的是服务名，不是插件名）：有 help 就排在它后面，
-没有也照常启动——登记失败只记一条 warn，不影响 `/kfc` 本身。服务名、方法名与
-JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
+```json
+{"name":"kfc","description":"…","role":"user","scopes":["private","group"],"hidden":false}
+```
+
+`/kfc` 在代码里没有权限判断（谁都能发，私聊 / 群都能用），所以登记 `role = user`、
+`scopes = ["private","group"]`、`hidden = false`——登记只是声明，不放宽也不收紧执行
+权限。成功回 `{"ok":true,"name":…,"plugin":…}`，失败回 `{"error":…}`。
+
+这张表由宿主预置，不是插件，所以**不需要 `soft_inject`**（本插件也不再声明它）。
+登记失败只记一条 warn，不影响 `/kfc` 本身。服务名、方法名与 JSON 协议见插件文档的
+[「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
 
 ## 命令
 
 - `/kfc`：抓取并出图。接口失败 / 空文案 / 渲染失败都会回一条文本说明，
-  不会静默失败；命令消息本身会被回复引用。
+  不会静默失败。
+
+回复形态由宿主决定，插件不自己拼 `sendMessage`：回复命令消息时只把
+`{"chat_id","message_id","timeout_ms","payload":{"input_message_content":…}}` 交给
+`fuyubot.host.command` 的 `reply`——bot / 白名单用户发新消息并引用命令，user 账户
+自己触发的命令被「编辑原命令」，群里的 ephemeral 命令走 `sendEphemeralMessage`。
+没有命令消息可回的主动推送（例如 panic 兜底提示）才走 simplify 的 `send_message`；
+相册（`sendMessageAlbum`）同理留在 simplify（一次多条，没有单条命令回复语义）。
 
 ## 架构
 
@@ -102,7 +118,8 @@ src/
     text.rs         文案清洗（换行归一、控制字符 / 零宽字符清理）
   host/
     mod.rs          Ctx（host / config / messenger / 停机标志）
-    messenger.rs    sendMessage / sendPhoto 的 simplify 封装
+    command.rs      fuyubot.host.command.reply 客户端（拼入参 / 解最终 Message / 错误映射）
+    messenger.rs    发送入口：回复命令走宿主命令通道，主动推送走 simplify send_message
     worker.rs       回调 → channel → 路由线程 → 业务线程
   render/
     mod.rs          数据映射 view_data()（含随机互动数字）、render_card()、宽度夹取、模板嵌入
@@ -120,7 +137,9 @@ assets/
 3. 插件卸载前必须 join 自己起的线程，否则动态库被卸载后仍有代码在跑。
 
 所以：回调只把更新丢进 channel，常驻 worker 线程解析并分发，每条命令再开一个短命线程
-跑完整流程（HTTP + 渲染服务调用 + 上传都是阻塞的）。
+跑完整流程（HTTP + 渲染服务调用 + 上传都是阻塞的）。命令回复
+（`fuyubot.host.command.reply`）同样**同步阻塞**（宿主当场等 TDLib 的最终消息），
+也只能在这个业务线程里调，绝不在更新回调里调。
 
 ## 渲染管线
 

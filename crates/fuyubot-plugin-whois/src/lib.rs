@@ -12,7 +12,8 @@
 //! - [`cmd`]：命令层，`/whois` 一条命令一个文件；
 //! - [`core`]：与宿主无关的能力（whois / IP 接口、数据模型、域名清洗、配置）；
 //! - [`render`]：图像生成，Vue 卡片模板 + 数据 → `fuyubot.html2img` → 本机图片文件；
-//! - [`help`]：`/help` 联动——把 `/whois` 登记进内置帮助的命令表。
+//! - [`help`]：`/help` 联动——把 `/whois` 登记进**宿主的命令表**
+//!   （`fuyubot.host.commands`），内置 `/help` 只是这张表的读取方。
 //!
 //! 线程模型与 ABI 约束见 [`host`] 模块文档：宿主回调只投递，业务线程里才做阻塞操作。
 
@@ -64,7 +65,8 @@ impl Plugin for Whois {
         self.subscription = Some(subscription);
         self.worker = Some(worker);
 
-        // 可选联动：把 `/whois` 登记进内置 `/help`；help 不在也只记一条 warn。
+        // 把 `/whois` 登记进宿主的命令表（`fuyubot.host.commands`，宿主自带，
+        // 不需要 `soft_inject`）；登记失败只记一条 warn，不影响命令本身。
         help::register(&self.host);
         Ok(())
     }
@@ -80,12 +82,6 @@ impl Plugin for Whois {
     /// 而不是启动后每条命令都渲染失败。
     fn inject() -> Vec<String> {
         vec![render::html2img::SERVICE.to_owned()]
-    }
-
-    /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/whois` 登记进去；
-    /// 没有也照常启动（登记失败只记日志）。
-    fn soft_inject() -> Vec<String> {
-        vec![help::SERVICE.to_owned()]
     }
 }
 

@@ -19,7 +19,8 @@ html2img 插件里，本插件不再链接渲染引擎，也不再下载 / 合�
   宿主会在服务就绪后再启动 system；没装时插件停在 Pending（不静默失败）。
 - 卡片头像缩到 ≤192px 后内嵌为 `data:image/jpeg;base64,…`，由 html2img 加载；
   背景图是一条**公网 URL**，同样由 html2img 拉取，本进程不下载、不缓存。
-- `fuyubot.help` 仍是软依赖（`soft_inject`）：没有也照常启动，只影响 `/help` 登记。
+- 命令登记走宿主预置的 `fuyubot.host.commands`（`start()` 里 `register`）：
+  命令表归宿主，图片版 `/help` 只是读取方，所以**不再软依赖** `/help` 插件。
 
 ## 预览
 
@@ -64,12 +65,16 @@ cd target/unocss-gen && node gen.mjs E:/Fuyu_TDBot/plugins/system/system.vue
 
 ## 与 `/help` 的联动
 
-插件在 `start()` 里通过进程级共享服务 `fuyubot.help.commands` 的 `register`
-方法，把 `/system` 登记进内置 `/help`，用户发 `/help` 就能看到这条命令。
+命令表的**主人是宿主**：插件在 `start()` 里通过宿主预置的服务
+`fuyubot.host.commands` 的 `register` 方法登记 `/system`，条目带
+`role` / `scopes` / `hidden`（本插件 `/system` 没有权限判断，登记为
+`role = "user"`、`scopes = ["private", "group"]`、`hidden = false`）。
+图片版 `/help` 只是这张表的读取方（`list`），按宿主的判定分组渲染。
 
-依赖用 `soft_inject` 声明（写的是服务名，不是插件名）：有 help 就排在它后面，
-没有也照常启动——登记失败只记一条 warn，不影响 `/system` 本身。服务名、方法名与
-JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
+`/system` 的回复也走宿主的命令回复服务 `fuyubot.host.command`：发新消息 +
+`reply_to`、编辑原命令消息还是发 ephemeral 都由宿主决定，插件不自己拼
+`sendMessage` / `reply_to`。登记失败（例如跨插件同名）只记一条 warn，
+不影响 `/system` 本身；**不再**用 `soft_inject` 声明 `/help`——宿主服务启动时就在。
 
 ## 使用
 
@@ -97,14 +102,15 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
    卡片数据按模板契约映射成 `data`（`bot` / `admin` / `tblib` / `system` / `plugins` / `background`）。
 8. `host.call_service("fuyubot.html2img", "render", …)` 带上 `assets/card.html` 模板、
    `vue: true` 与 `data`，渲染 1400×800 JPEG（`auto_height = false`、`scale = 1.0`、`format = "jpg"`）。
-9. 拿到本机 `path` → `send_photo` → 删除该文件（NotFound 不算错误）。
+9. 拿到本机 `path` → `send_photo`（有命令消息可回，走宿主的 `fuyubot.host.command`
+   回复通道）→ 删除该文件（NotFound 不算错误）。
 
 ## 项目结构
 
 | 路径 | 说明 |
 | --- | --- |
 | `src/lib.rs` | 插件入口：实现 `Plugin`，建 worker、订阅 `updateNewMessage`、停机清理 |
-| `src/host/` | 宿主适配层：channel 路由线程、simplify 消息网关（发文本 / 发照片） |
+| `src/host/` | 宿主适配层：channel 路由线程、消息网关（命令回复走 `fuyubot.host.command`，主动推送走 simplify） |
 | `src/cmd/` | 命令层：文本命令解析、`/system` 业务流程 |
 | `src/core/` | 与宿主无关：配置、系统信息采集、TDLib 查询、数据模型 |
 | `assets/card.html` | 卡片界面：`<style>`（reset + UnoCSS 工具类）+ Vue 模板 |

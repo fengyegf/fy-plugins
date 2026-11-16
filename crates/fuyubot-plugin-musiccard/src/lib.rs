@@ -10,7 +10,8 @@
 //! 模块划分：
 //! - [`cmd`]：命令解析与业务流程；
 //! - [`config`]：插件配置；
-//! - [`help`]：`/help` 联动——把 `/musiccard` 登记进内置帮助的命令表；
+//! - [`help`]：把 `/musiccard` 登记进**宿主的**命令表（`fuyubot.host.commands`，
+//!   `/help` 只是读取方）；
 //! - [`host`]：宿主适配（消息收发、更新调度）；
 //! - [`model`]：跨模块共享的数据模型；
 //! - [`netease`]：网易云接口；
@@ -75,7 +76,8 @@ impl Plugin for MusicCard {
         self.subscription = Some(subscription);
         self.worker = Some(worker);
 
-        // 可选联动：把 `/musiccard` 登记进内置 `/help`；help 不在也只记一条 warn。
+        // 命令表归宿主（`fuyubot.host.commands`）：登记 `/musiccard` 供 `/help` 读取；
+        // 登记失败只记一条 warn，命令本身照常执行。
         help::register(&self.host);
         Ok(())
     }
@@ -91,12 +93,6 @@ impl Plugin for MusicCard {
     /// 而不是启动后每条命令都渲染失败。
     fn inject() -> Vec<String> {
         vec![render::html2img::SERVICE.to_owned()]
-    }
-
-    /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/musiccard` 登记进去；
-    /// 没有也照常启动（登记失败只记日志）。
-    fn soft_inject() -> Vec<String> {
-        vec![help::SERVICE.to_owned()]
     }
 }
 

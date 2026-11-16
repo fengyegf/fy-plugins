@@ -27,14 +27,21 @@
   封面是网易云 CDN 的公网 URL，由 html2img 服务下载（单张上限 8 MiB）；二维码以
   data URI 内联在 `data` 里。模板远低于服务的 128 KiB 上限。
 
-## 与 `/help` 的联动
+## 命令表与 `/help`
 
-插件在 `start()` 里通过进程级共享服务 `fuyubot.help.commands` 的 `register`
-方法，把 `/musiccard` 登记进内置 `/help`，用户发 `/help` 就能看到这条命令。
+命令表的主人**是宿主，不是 `/help` 插件**：插件在 `start()` 里调进程级共享服务
+`fuyubot.host.commands` 的 `register`，把 `/musiccard` 登记成
+`{name:"musiccard", description:…, role:"user", scopes:["private","group"], hidden:false}`；
+`plugin`（命令归属）由宿主按调用者栈判定，插件自报不了也不用报。
 
-依赖用 `soft_inject` 声明（写的是服务名，不是插件名）：有 help 就排在它后面，
-没有也照常启动——登记失败只记一条 warn，不影响 `/musiccard` 本身。服务名、方法名与
-JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
+`/help` 只是**读取方**：它调同一张表的 `list`，按 `role` / `scopes` / `hidden`
+过滤后渲染。所以本插件不再用 `soft_inject` 去等 `/help` 启动（旧写法依赖的
+`fuyubot.help.commands` 只是宿主的兼容别名，新代码不用），也不需要链接 help。
+
+登记失败只记一条 warn：`/musiccard` 照常工作，只是不进 `/help`。真实的执行权限仍由
+本插件自己的命令匹配决定，登记里的 `role` / `scopes` / `hidden` 只影响它出现在哪些
+`/help` 里。服务名、方法名与 JSON 协议见插件文档的
+[「命令表与 /help」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/command-table/)。
 
 ## 使用
 
@@ -54,7 +61,9 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
 3. 筛选最多 5 行歌词并匹配译文；封面只保留接口给的公网 URL，不再下载。
 4. 把卡片映射成 Vue 模板的 `data`（标题 / 歌手 / 专辑 / 封面 URL / 二维码 / 日期 /
    歌词 / 适配字号），调 `fuyubot.html2img`（`vue: true`）渲染成 `650 x 1220` 的 JPEG。
-5. 把服务返回的本机图片路径直接作为照片发送，并回复原消息。
+5. 把服务返回的本机图片路径当作照片，走宿主的命令回复服务
+   （`fuyubot.host.command.reply`）回复触发命令的消息：发新消息 / 编辑原命令 /
+   群里发 ephemeral 由宿主决定。
 6. 删除渲染产物与进度消息。
 
 任何一步失败都会结束当前任务并回复错误原因，不会影响其他正在执行的命令。
@@ -65,7 +74,7 @@ JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io
 | --- | --- |
 | `src/lib.rs` | 插件入口、生命周期与消息订阅 |
 | `src/config.rs` | 插件配置读取（命令前缀、接口超时） |
-| `src/host/` | 宿主消息收发、更新路由与业务线程 |
+| `src/host/` | 宿主消息收发（含命令回复通道）、更新路由与业务线程 |
 | `src/cmd/` | 命令解析、分发与卡片业务流程 |
 | `src/netease/` | 搜索、歌曲详情、歌词与 LRC 解析（封面只取 URL） |
 | `assets/card.html` | 卡片界面：`<style>` + Vue 模板（循环 / 条件 / 插值） |
@@ -179,6 +188,9 @@ Copy-Item target\release\musiccard.dll <FuyuBot目录>\plugins\
   本地用 `qrcode` 生成 PNG，再以 `data:image/png;base64,…` 内联。
 - 虚线用一排 2px 小方块拼（Blitz 的 `border-style:dashed` 不可靠），在模板里由
   `v-for` 生成，Rust 不参与。
+- 回复命令走宿主的 `fuyubot.host.command`（`reply`）：插件只交
+  `input_message_content`，不再自己拼 `sendMessage` / `reply_to`；主动推送（没有命令
+  消息可回）仍走 simplify 的 `send_message`。
 - 网络请求使用阻塞式 `ureq`，整体跑在命令专用业务线程中，不阻塞宿主的消息接收线程；
   html2img 的服务调用同样是同步阻塞的，只在业务线程里调。
 - 歌词按字符截断，避免中文和 emoji 被字节边界切坏。

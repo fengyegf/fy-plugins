@@ -15,13 +15,23 @@ FuyuBot 的下载与 Galgame 信息插件。它支持多链接下载、压缩包
 
 ## 与 `/help` 的联动
 
-插件在 `start()` 里通过进程级共享服务 `fuyubot.help.commands` 的 `register`
-方法，把 `/download`、`/galgame`、`/cancel`、`/clearcache` 四条命令登记进内置
-`/help`，用户发 `/help` 就能看到它们（别名 `/d`、`/p` 写在说明里）。
+命令表的主人是**宿主**：插件在 `start()` 里调 `fuyubot.host.commands` 的 `register`，
+把 `/download`、`/galgame`、`/cancel`、`/clearcache` 四条命令登记进宿主命令表。
+登记项带 `role` / `scopes` / `hidden` 三个能力字段：四条命令都没有权限判断，所以
+统一是 `role = "user"`、`scopes = ["private", "group"]`、`hidden = false`（与代码里
+实际的权限判断一致，登记不改变执行权限）。图片版 `/help` 只是这张表的读取方
+（`list`），按角色与会话过滤后渲染，用户发 `/help` 就能看到这些命令
+（别名 `/d`、`/p` 写在说明里）。
 
-`soft_inject` 里同时写了 `fuyubot.help.commands`（联动）和 `storage.mongo`
-（可选入库）两个**服务名**：有 help 就排在它后面，没有也照常启动——登记失败只记
-一条 warn，不影响插件本身。服务名、方法名与 JSON 协议见插件文档的
+命令回复也走宿主：`/d`、`/p`、`/cancel`、`/clearcache` 的回复调
+`fuyubot.host.command` 的 `reply`，由宿主决定是发新消息（并自己带 `reply_to`）、
+编辑原命令消息还是发 ephemeral，插件不再自己拼 `reply_to` 与 `sendMessage`。
+分卷上传（document）与相册属于流程产物、没有命令消息可回，仍然走 simplify 的
+`sendMessage` / `sendMessageAlbum`。
+
+命令表由宿主在启动时预置，不是某个插件提供的服务，所以 `soft_inject` 里只剩可选的
+`storage.mongo`（入库能力）：没装 mongo-plugin 照常跑，登记失败也只记一条 warn，
+不影响插件本身。服务名、方法名与 JSON 协议见插件文档的
 [「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
 
 ## 命令
@@ -179,7 +189,7 @@ src/
   core/             配置、HTTP、压缩包、页面与目录树处理
   db/               storage.mongo 客户端与 Galgame 记录模型
   galgame/          DMM / DLSite 页面解析与分享文本
-  host/             消息、任务、进度、回复等待与线程调度
+  host/             消息、命令回复、任务、进度、回复等待与线程调度
   package/          分卷压缩与上传准备
   telegraph/        Telegraph 页面生成
   unpack/           解压、密码交互与文件名修复入口

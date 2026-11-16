@@ -20,14 +20,33 @@
   TDLib 回调线程。
 - `html2img` 产出的临时图片发送完成后立即删除。
 
-## 与 `/help` 的联动
+## 命令表与 `/help`
 
-插件在 `start()` 里通过进程级共享服务 `fuyubot.help.commands` 的 `register`
-方法，把 `/whois` 登记进内置 `/help`，用户发 `/help` 就能看到这条命令。
+命令表的主人是**宿主**：宿主把命令表暴露成进程级共享服务 `fuyubot.host.commands`，
+插件在 `start()` 里用它的 `register` 方法登记 `/whois`。内置 `/help` 只是这张表的
+读取方（`fuyubot.host.commands.list` 之后按 `role` / `scopes` / `hidden` 过滤、
+按插件分组渲染）。宿主服务启动时就在，因此**不需要** `soft_inject` 排队。
 
-依赖用 `soft_inject` 声明（写的是服务名，不是插件名）：有 help 就排在它后面，
-没有也照常启动——登记失败只记一条 warn，不影响 `/whois` 本身。服务名、方法名与
-JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
+登记入参：
+
+```json
+{"name":"whois","description":"查询域名注册信息与服务器 IP 归属，渲染成信息卡片","role":"user","scopes":["private","group"],"hidden":false}
+```
+
+`/whois` 没有权限判断、私聊与群聊都能用，就按这个实际范围登记；登记只是自描述，
+执行权限仍由插件自己的命令匹配决定。成功回 `{"ok":true,"name":…,"plugin":…}`
+（`plugin` 由宿主按调用者栈判定），失败回 `{"error":…}`；登记失败只记一条 warn，
+不影响 `/whois` 本身。
+
+## 回复方式
+
+回复命令消息走宿主的 `fuyubot.host.command` 服务的 `reply` 方法，入参是
+`{"chat_id":…,"message_id":…,"timeout_ms":…,"payload":{"input_message_content":…}}`，
+成功返回 TDLib 最终的 `Message`，失败回 `{"@type":"error",…}`（映射成操作错误）。
+发新消息并挂 `reply_to`、编辑原命令消息、还是群里的 ephemeral 消息，都由宿主决定
+——插件不再自己拼 `chat_id` / `reply_to`。该服务是同步阻塞调用，只在本插件的业务
+线程里用。主动推送（没有命令消息可回，例如任务 panic 时的内部错误提示）继续用
+simplify 的 `send_message`；相册同理。
 
 ## 渲染链路
 
@@ -88,14 +107,15 @@ Rust 里算好（`creation_years`），模板只读字段；HTML 转义由渲染
 6. 抓取网站图标：`/favicon.ico` → `www.` 前缀 → 首页声明的图标；失败则用内置图标。
 7. 合并数据，映射成 Vue 模板的 `data`（派生 `creation_years` / `ip_location` / 图标 data URI）。
 8. 调 `fuyubot.html2img` 的 `render` 出图（宽度取配置、高度自适应、JPEG）。
-9. 发送照片，再删除服务产出的临时文件。
+9. 通过 `fuyubot.host.command.reply` 回复照片（发新消息 / 编辑原命令 / ephemeral
+   由宿主决定），再删除服务产出的临时文件。
 
 ## 项目结构
 
 | 路径 | 说明 |
 | --- | --- |
 | `src/lib.rs` | 插件入口、订阅生命周期和启停管理 |
-| `src/host/` | 宿主通信、TDLib 消息解析和消息网关 |
+| `src/host/` | 宿主通信、TDLib 消息解析、命令回复通道与消息网关 |
 | `src/cmd/` | 命令解析、任务分发与 `/whois` 业务 |
 | `src/core/` | 配置、接口请求、域名清洗和数据模型 |
 | `src/render/` | Vue 卡片模板嵌入、图标 data URI 与 `fuyubot.html2img` 服务客户端 |
@@ -222,3 +242,4 @@ prefixes      = ["/", "!", "！", ".", "#"]
 - 系统缺少合适的中文字体时，卡片中的 CJK 字符可能使用系统回退字体。
 - Whois 数据来自配置的公开接口；接口不可用或限流时，命令会返回失败提示。
 - 插件停止时会等待当前阻塞操作到达安全边界；图片上传网关的超时上限为 120 秒。
+- 回复命令时的消息形态（发新消息 / 编辑原命令 / ephemeral）由宿主决定，插件只提供内容。

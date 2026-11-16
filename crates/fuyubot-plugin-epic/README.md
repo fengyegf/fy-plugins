@@ -33,12 +33,19 @@ Epic 免费游戏卡片插件，基于 FuyuBot Plugin SDK 构建。插件读取 
 
 ## 与 `/help` 的联动
 
-插件在 `start()` 里通过进程级共享服务 `fuyubot.help.commands` 的 `register`
-方法，把 `/epic` 登记进内置 `/help`，用户发 `/help` 就能看到这条命令。
+命令表的主人是**宿主**：插件在 `start()` 里调 `fuyubot.host.commands` 的 `register`，
+给 `/epic` 登记 `role = "user"`、`scopes = ["private", "group"]`、`hidden = false`。
+图片版 / 文字版 `/help` 都只是这张表的读取方，按 `role` / `scopes` / `hidden` 过滤后
+分组渲染；条目归属由宿主按调用者栈判定（ABI v6 的 `current_plugin`），插件不需要
+（也报不了）插件名。
 
-依赖用 `soft_inject` 声明（写的是服务名，不是插件名）：有 help 就排在它后面，
-没有也照常启动——登记失败只记一条 warn，不影响 `/epic` 本身。服务名、方法名与
-JSON 协议见插件文档的[「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
+- 不再 `soft_inject` 任何 help 服务：命令表在宿主里，宿主启动时就在；
+- 旧的 `fuyubot.help.commands` 只是兼容别名，本插件不用；
+- 登记失败（例如和别的插件重名）只记一条 warn，不影响 `/epic` 本身。
+
+命令回复走宿主的 `fuyubot.host.command` 服务（方法 `reply`）：宿主决定发新消息、
+编辑原命令消息还是发 ephemeral 消息，插件不自己拼 `sendMessage`。
+协议见插件文档的[「命令表与 /help」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/command-table/)。
 
 ## 使用
 

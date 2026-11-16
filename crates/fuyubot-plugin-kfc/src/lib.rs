@@ -10,7 +10,8 @@
 //! - [`cmd`]：命令层，`/kfc` 一条命令一个文件；
 //! - [`core`]：与宿主无关的能力（取文案、清洗文本、配置）；
 //! - [`render`]：图像生成，`assets/card.html` 的 Vue 模板 + 数据 → `fuyubot.html2img` → 本机图片文件；
-//! - [`help`]：`/help` 联动——把 `/kfc` 登记进内置帮助的命令表。
+//! - [`help`]：命令表联动——把 `/kfc` 连同 role / scopes / hidden 登记进**宿主**的命令表
+//!   （`fuyubot.host.commands`）；内置 `/help` 只是这张表的读取方。
 //!
 //! 线程模型与 ABI 约束见 [`host`] 模块文档：宿主回调只投递，业务线程里才做阻塞操作。
 
@@ -62,7 +63,8 @@ impl Plugin for Kfc {
         self.subscription = Some(subscription);
         self.worker = Some(worker);
 
-        // 可选联动：把 `/kfc` 登记进内置 `/help`；help 不在也只记一条 warn。
+        // 可选联动：把 `/kfc` 登记进宿主的命令表（内置 `/help` 从这张表里读）；
+        // 宿主没提供这张表也只记一条 warn，不影响命令本身。
         help::register(&self.host);
         Ok(())
     }
@@ -78,12 +80,6 @@ impl Plugin for Kfc {
     /// 而不是启动后每条命令都渲染失败。
     fn inject() -> Vec<String> {
         vec![render::html2img::SERVICE.to_owned()]
-    }
-
-    /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/kfc` 登记进去；
-    /// 没有也照常启动（登记失败只记日志）。
-    fn soft_inject() -> Vec<String> {
-        vec![help::SERVICE.to_owned()]
     }
 }
 

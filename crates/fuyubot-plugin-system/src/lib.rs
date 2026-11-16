@@ -11,7 +11,8 @@
 //! - [`cmd`]：命令层，`/system` 一条命令一个文件；
 //! - [`core`]：与宿主无关的能力（配置、系统信息采集、TDLib 查询、数据模型）；
 //! - [`render`]：图像生成，Vue 模板 + `data` → `fuyubot.html2img` → 本机图片文件；
-//! - [`help`]：`/help` 联动——把 `/system` 登记进内置帮助的命令表。
+//! - [`help`]：`/help` 联动——把 `/system` 登记进**宿主的命令表**
+//!   （`fuyubot.host.commands`；图片版 /help 只是读取方）。
 //!
 //! 线程模型见 [`host`] 模块文档：宿主回调只投递，业务线程里才做阻塞操作。
 
@@ -64,7 +65,7 @@ impl Plugin for SystemPlugin {
         self.subscription = Some(subscription);
         self.worker = Some(worker);
 
-        // 可选联动：把 `/system` 登记进内置 `/help`；help 不在也只记一条 warn。
+        // 可选联动：把 `/system` 登记进宿主命令表；登记失败只记一条 warn。
         help::register(&self.host);
         Ok(())
     }
@@ -80,12 +81,6 @@ impl Plugin for SystemPlugin {
     /// 而不是启动后每条命令都渲染失败。
     fn inject() -> Vec<String> {
         vec![render::html2img::SERVICE.to_owned()]
-    }
-
-    /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/system` 登记进去；
-    /// 没有也照常启动（登记失败只记日志）。
-    fn soft_inject() -> Vec<String> {
-        vec![help::SERVICE.to_owned()]
     }
 }
 

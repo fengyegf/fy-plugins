@@ -10,7 +10,8 @@
 //! - [`telegraph`]：把作品图集发成 Telegraph 页面；
 //! - [`unpack`] / [`package`]：解压与打包；
 //! - [`util`]：纯工具，不碰宿主、不含流程（文件操作、7z、乱码名修复）；
-//! - [`help`]：`/help` 联动——把本插件的四条命令登记进内置帮助的命令表。
+//! - [`help`]：`/help` 联动——把本插件的四条命令登记进**宿主**的命令表
+//!   `fuyubot.host.commands`（命令表归宿主，图片版 `/help` 只是读取方）。
 
 mod cmd;
 mod core;
@@ -60,7 +61,8 @@ impl Plugin for Ppxfy {
         self.subscription = Some(subscription);
         self.worker = Some(worker);
 
-        // 可选联动：把四条命令登记进内置 `/help`；help 不在也只记 warn。
+        // 可选联动：把四条命令登记进宿主命令表 `fuyubot.host.commands`。
+        // 服务由宿主预置，登记失败（跨插件重名 / 旧宿主）也只记 warn。
         help::register(&self.host);
         Ok(())
     }
@@ -72,16 +74,18 @@ impl Plugin for Ppxfy {
         self.host.info("ppxfy: 已停止");
     }
 
-    /// 软依赖：内置 `/help` 的命令表 + 可选的 `storage.mongo`。
+    /// 软依赖：只有可选的 `storage.mongo`。
     ///
-    /// 两个都写**服务名**（Cordis 的 inject 语义），不是插件名：业务依赖的是
-    /// 「谁能提供这个能力」，至于由哪个插件提供与 ppxfy 无关。
+    /// 写**服务名**（Cordis 的 inject 语义）而不是插件名：业务依赖的是「谁能提供
+    /// 这个能力」，至于由哪个插件提供与 ppxfy 无关。
     ///
-    /// - `fuyubot.help.commands`：有它就排在它后面，好把命令登记进 `/help`；
-    ///   没有也照常启动（登记失败只记日志）。
     /// - `storage.mongo`：装了 mongo-plugin 就把作品记录入库，没装照常跑。
+    ///
+    /// 命令表 `fuyubot.host.commands` **不在这里**：它由宿主在启动时预置，不是某个
+    /// 插件提供的服务，不需要软依赖去等；登记见 [`help`]，失败也只记 warn。
+    /// 旧的 `fuyubot.help.commands` 只是兼容别名，已从软依赖里删掉。
     fn soft_inject() -> Vec<String> {
-        vec![help::SERVICE.to_owned(), "storage.mongo".to_owned()]
+        vec!["storage.mongo".to_owned()]
     }
 }
 

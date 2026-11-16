@@ -12,7 +12,7 @@
 //! - [`render`]：Vue 模板数据映射 + `fuyubot.html2img` 服务客户端（不碰宿主）；
 //! - [`host`]：宿主适配（订阅、消息发送、线程调度）；
 //! - [`cmd`]：命令层（`/epic` 一个命令一个文件）；
-//! - [`help`]：`/help` 联动——把 `/epic` 登记进内置帮助的命令表。
+//! - [`help`]：`/help` 联动——把 `/epic` 登记进**宿主的命令表**（图片版 /help 只读它）。
 
 // 模块一律 `pub`：crate 额外编了 rlib，`cargo test` / `examples/` 才能直接调内部模块。
 // 这不影响宿主加载 cdylib —— 宿主只找 `plugin_*` 那几个导出符号。
@@ -58,7 +58,7 @@ impl Plugin for Epic {
         self.subscription = Some(subscription);
         self.worker = Some(worker);
 
-        // 可选联动：把 `/epic` 登记进内置 `/help`；help 不在也只记一条 warn。
+        // 可选联动：把 `/epic` 登记进宿主命令表；登记失败只记一条 warn。
         help::register(&self.host);
         Ok(())
     }
@@ -74,12 +74,6 @@ impl Plugin for Epic {
     /// 而不是启动后每条命令都渲染失败。
     fn inject() -> Vec<String> {
         vec![render::html2img::SERVICE.to_owned()]
-    }
-
-    /// 软依赖内置 `/help` 的命令表：有它就排在它后面，好把 `/epic` 登记进去；
-    /// 没有也照常启动（登记失败只记日志）。
-    fn soft_inject() -> Vec<String> {
-        vec![help::SERVICE.to_owned()]
     }
 }
 
