@@ -20,6 +20,7 @@
 | `ppxfy` | `crates/fuyubot-plugin-ppxfy` | 0.1.5 | Windows / Linux / macOS（**不含 Android**） | `ppxfy.dll` |
 | `system` | `crates/fuyubot-plugin-system` | 0.1.4 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
 | `trending` | `crates/fuyubot-plugin-trending` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `trending.dll` |
+| `bidibot` | `crates/fuyubot-plugin-bidibot` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bidibot.dll` |
 
 平台列表的唯一来源是各 crate 的 `plugin.json`；发布流水线按它生成构建矩阵。
 
@@ -49,6 +50,15 @@
 > `fuyubot.html2img 0.1.2` 的离线回放里真实出图（今日 / 本周 / 本月三档、1600px 与
 > 1200px 两档宽度）。它还没进上面那批多平台验证，也没跑过真机。
 
+> `bidibot` v0.2（论坛群话题式中转）同样只做过本机验证：`cargo build --release` +
+> `cargo test`（143 项）+ `cargo clippy -D warnings` + `scripts/check_abi.py`（ABI 符号 7/7）+
+> `scripts/package.py --platform windows-x86_64`，并在宿主 0.1.6 的离线回放里验过
+> 建话题 / 话题内转发 / 话题内回复回到用户 / 话题内拉黑；用户名片在装了 `fuyubot.html2img` 时
+> 会渲染成图片卡片（软依赖，没装自动降级文字），已用真实 html2img 0.1.2 出图验证。
+> 未进多平台矩阵，也没在真账号上跑过完整收发。
+> 口径见 [`docs/bidibot-topics-design.md`](docs/bidibot-topics-design.md)，配置与命令见
+> [`crates/fuyubot-plugin-bidibot/README.md`](crates/fuyubot-plugin-bidibot/README.md)。
+
 验证记录：<https://github.com/fengyegf/fy-plugins/actions/runs/42824916393>。
 上面的验证是 ABI v5 时期跑的；迁到 ABI v6 后，只有构建/打包结论仍然成立，宿主加载
 需要新版（ABI v6）的 `fuyubot-sdk` / FuyuBot 才能验证——本机附带的
@@ -75,6 +85,58 @@
 （Actions → verify-platforms → Run workflow），或推 `verify/platforms` 分支；
 Android 的两端仍按发布流水线（tag）构建。
 
+## 命令一览
+
+插件命令都是**普通文本消息**：前缀可配（缺省 `/` `!` `！` `.` `#`），命令名大小写不敏感，
+`/whois@FuyuBot` 里的 `@FuyuBot` 会被剥掉。每个插件启动时把自己登记进宿主的命令表
+（`fuyubot.host.commands`），所以下表就是 `/help` 里看到的内容：这些命令都没有权限判断，
+一律登记 `role = user`、`scopes = private + group`（频道不登记，频道里没有「回命令」的会话上下文）。
+
+| 插件 | 命令 | 别名 | 参数 | 说明 |
+| --- | --- | --- | --- | --- |
+| `whois` | `/whois` | — | `<域名>`，可给完整 URL | 查域名注册信息与服务器 IP 归属，出信息卡片；不带参数回用法提示 |
+| `musiccard` | `/musiccard` | — | `<歌曲 ID / 网易云链接 / 关键词>` | 生成网易云音乐卡片；参数按空格拼回，关键词可带空格 |
+| `epic` | `/epic` | `/epicfree` | — | Epic 当前免费 / 即将免费的游戏卡片 |
+| `kfc` | `/kfc` | — | — | 随机一句肯德基疯话，渲染成推特卡片 |
+| `ppxfy` | `/download` | `/d`、`/downloadcommand` | — | 交互式下载：回复链接（可多条，`OK` 结束）→ 解压 → 目录树确认 → 打包上传 |
+| `ppxfy` | `/galgame` | `/p`、`/galgamecommand` | `<DMM / DLSite 作品链接>` | 解析作品页 → Telegraph 预览页 → 逐项核对（`BACK` / `CANCEL`）→ 记录入库 → 分享消息 |
+| `ppxfy` | `/cancel` | — | — | 取消当前聊天的下载 / 核对任务，并清理临时文件 |
+| `ppxfy` | `/clearcache` | — | — | 兜底清理 `cache/`（没有活跃任务时也能用） |
+| `system` | `/system` | — | — | 宿主机系统信息与机器人状态卡片 |
+| `trending` | `/trending` | — | `[today\|weekly\|monthly]`，中文（今日 / 本周 / 本月）也认，缺省今日 | GitHub Trending 4 列卡片墙 |
+
+几点补充：
+
+- 别名不单独占 `/help` 一行，只写进主命令的说明里；
+- 未识别的命令**静默忽略**，所以多个插件可以共存，同一条消息只由匹配到的插件处理；
+- `ppxfy` 的交互步骤（链接、密码、编号、包名）都是**回复提示消息**，等待上限是
+  `listen_timeout_ms`（缺省 10 分钟），`/cancel` 随时可打断；
+- 参数不认识时（例如 `/trending foo`）只回一条用法提示，不替用户猜。
+
+## 配置一览
+
+每个插件只读自己名字那一段 `[plugin.<id>]`，段内全部平铺；键名同时接受 `snake_case`
+与大写写法，缺失或类型不对的键退回缺省值。键的含义、缺省值与夹取范围见各插件自己的
+README（下表「插件」一列），本文只列「有哪些键」。
+
+| 插件 | 配置段 | 键 |
+| --- | --- | --- |
+| [whois](crates/fuyubot-plugin-whois/README.md) | `[plugin.whois]` | `whois_api_url` `ip_api_url` `width` `timeout_ms` `favicon` `favicon_timeout_ms` `prefixes` |
+| [musiccard](crates/fuyubot-plugin-musiccard/README.md) | `[plugin.musiccard]` | `request_timeout_ms` |
+| [epic](crates/fuyubot-plugin-epic/README.md) | `[plugin.epic]` | `locale` `country` `timezone_offset_hours` `api_url` `user_agent` `proxy` `timeout_ms` `scale` `max_per_row` `max_cards` `card_width` `cover_height` `caption` |
+| [kfc](crates/fuyubot-plugin-kfc/README.md) | `[plugin.kfc]` | `api_url` `width` `timeout_ms` `prefixes` |
+| [ppxfy](crates/fuyubot-plugin-ppxfy/README.md) | `[plugin.ppxfy]` | `cache_dir` `listen_timeout_ms` `unzip_timeout_ms` `archive_size_threshold_mb` `download_concurrency` `split_threshold_mb` `seven_zip` `fix_encoding` `telegraph_token` `telegraph_author` `telegraph_author_url` `dlsite_proxy` `mongo_collection` `mongodb_db` |
+| [system](crates/fuyubot-plugin-system/README.md) | `[plugin.system]` | `super_admin` `background_url` `timeout_ms` `avatar_timeout_ms` `prefixes` |
+| [trending](crates/fuyubot-plugin-trending/README.md) | `[plugin.trending]` | `trending_url` `width` `timeout_ms` `max_items` `avatar` `avatar_timeout_ms` `prefixes` |
+
+两点约定：
+
+- 命令前缀有两种取法，缺省都是 `["/", "!", "！", ".", "#"]`：`whois` / `kfc` / `system` /
+  `trending` 先读本插件段的 `prefixes`，没写再跟随宿主顶层 `[config].PREFIXES`；
+  `musiccard` / `epic` / `ppxfy` 只跟随宿主顶层 `[config].PREFIXES`，本段没有这个键。
+- `ppxfy` 的两个凭据（`telegraph_token` / `dlsite_proxy`）按「配置段 > 环境变量
+  `PPXFY_TELEGRAPH_TOKEN` / `PPXFY_DLSITE_PROXY` > `.env`」取值，代码里不留缺省值；
+  galgame 记录入库走 mongo-plugin 的 `storage.mongo`，没装时分享照常、只是不入库。
 
 ## 目录
 
