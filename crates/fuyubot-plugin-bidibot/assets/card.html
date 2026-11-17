@@ -1,0 +1,26 @@
+<style>
+  html, body { margin:0; padding:0; background:transparent; }
+  .card { box-sizing:border-box; width:100%; padding:16px 20px; background:#ffffff;
+          border:1px solid rgba(17,24,39,0.08);
+          border-radius:16px; display:flex; align-items:flex-start; gap:14px;
+          font-family:-apple-system,'Segoe UI','Microsoft YaHei','Noto Sans CJK SC',sans-serif; }
+  .avatar { flex:none; width:64px; height:64px; border-radius:50%; object-fit:cover; }
+  .avatar-ph { display:flex; align-items:center; justify-content:center; background:#eef2f9; color:#7b8aa3;
+               font-size:26px; line-height:64px; font-weight:600; }
+  .main { flex:1 1 auto; min-width:0; padding-top:2px; }
+  .name { font-size:22px; line-height:30px; font-weight:700; color:#111827;
+          white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ident { margin-top:3px; font-size:14px; line-height:20px; color:#8a94a6;
+           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .username { color:#2f8ce0; }
+  .sep { display:inline-block; margin:0 7px; color:#c2cad8; }
+  .id { font-family:'Cascadia Mono','Consolas','DejaVu Sans Mono',monospace; }
+</style>
+<div class="card">
+  <img v-if="avatar" class="avatar" :src="avatar" alt="" />
+  <div v-else class="avatar avatar-ph">{{ initial }}</div>
+  <div class="main">
+    <div class="name">{{ name }}</div>
+    <div class="ident"><span v-if="username" class="username">{{ username }}</span><span v-if="username && user_id" class="sep">&#160;·&#160;</span><span v-if="user_id" class="id">{{ user_id }}</span></div>
+  </div>
+</div>
