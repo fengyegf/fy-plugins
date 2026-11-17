@@ -714,6 +714,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fuyubot-plugin-bidibot"
+version = "0.1.0"
+dependencies = [
+ "fuyubot-plugin-api",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "ureq",
+]
+
+[[package]]
 name = "fuyubot-plugin-epic"
 version = "0.1.4"
 dependencies = [
