@@ -50,8 +50,8 @@
 > `fuyubot.html2img 0.1.2` 的离线回放里真实出图（今日 / 本周 / 本月三档、1600px 与
 > 1200px 两档宽度）。它还没进上面那批多平台验证，也没跑过真机。
 
-> `bidibot` v0.2（论坛群话题式中转）同样只做过本机验证：`cargo build --release` +
-> `cargo test`（143 项）+ `cargo clippy -D warnings` + `scripts/check_abi.py`（ABI 符号 7/7）+
+> `bidibot` v0.1.0（论坛群话题式中转）同样只做过本机验证：`cargo build --release` +
+> `cargo test`（114 项）+ `cargo clippy -D warnings` + `scripts/check_abi.py`（ABI 符号 7/7）+
 > `scripts/package.py --platform windows-x86_64`，并在宿主 0.1.6 的离线回放里验过
 > 建话题 / 话题内转发 / 话题内回复回到用户 / 话题内拉黑；用户名片在装了 `fuyubot.html2img` 时
 > 会渲染成图片卡片（软依赖，没装自动降级文字），已用真实 html2img 0.1.2 出图验证。
