@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "bidibot",
+  "name": "Bidibot 双向私聊",
+  "version": "0.1.0",
+  "kind": "native",
+  "entry": "bidibot.dll",
+  "abi": 6,
+  "platforms": [
+    "windows-x86_64",
+    "linux-x86_64",
+    "macos-aarch64",
+    "android-aarch64",
+    "android-x86_64"
+  ],
+  "description": "论坛群话题式中转：用户私聊消息转发进群（一个用户一个话题，话题名=用户昵称），主人在话题里回复即转发回用户（不转发、不暴露主人）；广告拦截与三次熔断，单向拉黑与本地库。"
+}

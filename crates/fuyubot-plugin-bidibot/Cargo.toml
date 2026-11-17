@@ -1,0 +1,20 @@
+# bidibot：双向私聊中转 Bot（用户 ↔ 主人）。
+#
+# 与同仓其它插件一致：cdylib 给宿主 dlopen，rlib 让 cargo test / examples 能直接调内部模块。
+[package]
+name = "fuyubot-plugin-bidibot"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "双向私聊中转：用户消息转给主人、主人回复转给用户，带翻译、广告熔断与本地封禁库"
+
+[lib]
+name = "bidibot"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fuyubot-plugin-api.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+serde = { version = "1", features = ["derive"] }
