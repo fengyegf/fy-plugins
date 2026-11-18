@@ -58,3 +58,32 @@ def main() -> int:
 
     include = [
         {
+            "platform": platform,
+            "os": RUNNERS[platform][0],
+            "target": RUNNERS[platform][1],
+            "android_abi": RUNNERS[platform][2],
+        }
+        for platform in platforms
+    ]
+    result = {
+        "id": args.plugin,
+        "version": version,
+        "platforms": platforms,
+        "matrix": {"include": include},
+    }
+    text = json.dumps(result, ensure_ascii=False)
+    print(text)
+
+    if args.github_output:
+        output = os.environ.get("GITHUB_OUTPUT")
+        if not output:
+            raise SystemExit("--github-output 需要 GITHUB_OUTPUT 环境变量")
+        with open(output, "a", encoding="utf-8") as handle:
+            handle.write(f"id={args.plugin}\n")
+            handle.write(f"version={version}\n")
+            handle.write(f"matrix={json.dumps(result['matrix'])}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
