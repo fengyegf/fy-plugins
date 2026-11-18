@@ -80,7 +80,7 @@ pub enum Error {
 
 /// 把卡片渲染成本机图片文件，返回 html2img 产出的路径。
 ///
-/// `background_url` 是 `[plugin.system] background_url`：公网 URL 写进模板的
+/// `background_url` 是 `[plugin.fengyegf.system] background_url`：公网 URL 写进模板的
 /// `data.background`，由 html2img 去拉；不是公网 `http(s)` 就传空串，模板用
 /// `v-if` 把背景图整个隐藏，只留渐变。
 ///

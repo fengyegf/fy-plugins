@@ -1,10 +1,10 @@
 //! 插件配置。
 //!
-//! 全部配置来自宿主的 `[plugin.ppxfy]` 段（`fuyubot.toml`），键名同时接受
+//! 全部配置来自宿主的 `[plugin.fengyegf.ppxfy]` 段（`fuyubot.toml`），键名同时接受
 //! snake_case 与大写写法。
 //!
 //! ```toml
-//! [plugin.ppxfy]
+//! [plugin.fengyegf.ppxfy]
 //! cache_dir = "cache"                # 运行目录下的缓存目录
 //! listen_timeout_ms = 600000         # 等待用户回复的超时
 //! unzip_timeout_ms = 1800000         # 单次解压（7z 兜底路径）的超时
@@ -34,8 +34,8 @@ use std::time::Duration;
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::{Map, Value};
 
-/// 插件段名：`[plugin.ppxfy]`。
-pub const PLUGIN_NAME: &str = "ppxfy";
+/// 插件段名：`[plugin.fengyegf.ppxfy]`。
+pub const PLUGIN_NAME: &str = "fengyegf.ppxfy";
 
 /// 默认命令前缀。
 const DEFAULT_PREFIXES: [&str; 5] = ["/", "!", "！", ".", "#"];
@@ -265,7 +265,7 @@ fn credential(name: &str) -> Option<String> {
 /// 自己解析而不引入 dotenv 依赖：宿主不一定加载环境文件，插件也没权限改宿主
 /// 的环境变量（edition 2024 里 `set_var` 是 unsafe），所以只按键取值用。
 ///
-/// 候选位置有两个：宿主的工作目录，以及「工作目录/plugins/ppxfy」——宿主从自
+/// 候选位置有两个：宿主的工作目录，以及「工作目录/plugins/fengyegf.ppxfy」——宿主从自
 /// 身根目录启动时，插件目录里的 `.env` 就不在 cwd 下。
 fn dotenv(name: &str) -> Option<String> {
     let cwd = std::env::current_dir().ok()?;

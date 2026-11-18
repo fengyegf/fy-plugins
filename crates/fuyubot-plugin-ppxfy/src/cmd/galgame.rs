@@ -108,7 +108,7 @@ fn flow(ctx: &Ctx, task: &Task, msg: Msg, text: &str) -> Result<(), String> {
         ctx.messenger.edit_text(
             tips.chat_id,
             tips.message_id,
-            "❌ 未配置 telegraph_token（[plugin.ppxfy] 段），已中止。",
+            "❌ 未配置 telegraph_token（[plugin.fengyegf.ppxfy] 段），已中止。",
         );
         return Ok(());
     }

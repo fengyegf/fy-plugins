@@ -5,7 +5,7 @@
 //! 服务不在线（没装 mongo-plugin / 没起来）时，所有操作只返回错误，不影响
 //! 下载、打包等主流程——调用方按「失败只警告」处理即可。
 //!
-//! 涉及的配置项（都在 `[plugin.ppxfy]` 段）：
+//! 涉及的配置项（都在 `[plugin.fengyegf.ppxfy]` 段）：
 //!
 //! - `mongo_collection`：集合名，缺省 `ppxfy_galgame`；
 //! - `mongodb_db`：覆盖 mongo-plugin 的默认库；留空 = 用服务端的默认库。

@@ -1,6 +1,6 @@
 # Bidibot 双向私聊中转
 
-`bidibot` · v0.1.1 · ABI v6 · Windows / Linux / macOS / Android
+`fengyegf.bidibot` · v0.1.1 · ABI v6 · Windows / Linux / macOS / Android
 
 ## 项目介绍
 
@@ -33,7 +33,7 @@ crates/fuyubot-plugin-bidibot/
 部署后（ZIP 根 = 插件目录内容）：
 
 ```text
-plugins/bidibot/
+plugins/fengyegf.bidibot/
   plugin.json
   bin/bidibot.dll        # Linux: libbidibot.so / macOS: libbidibot.dylib
   config.default.toml
@@ -58,11 +58,11 @@ plugins/bidibot/
 | `/bidisay [id] <文字>` | 主人 · 群 | 以 bot 身份主动给某用户发一条 |
 | `/bidicard` | 主人 · 群 | 在当前话题里重发该用户的名片 |
 
-命令前缀来自 `[plugin.bidibot].prefixes`（默认 `/`、`!`、`！`、`.`、`#`）；宿主顶层 `[config].PREFIXES` 仅在插件未给前缀时兜底。管理命令登记为 `role = "owner"`，宿主的 `[roles].owners` 必须包含 `owner_id`，否则会被命令闸门拦下。
+命令前缀来自 `[plugin.fengyegf.bidibot].prefixes`（默认 `/`、`!`、`！`、`.`、`#`）；宿主顶层 `[config].PREFIXES` 仅在插件未给前缀时兜底。管理命令登记为 `role = "owner"`，宿主的 `[roles].owners` 必须包含 `owner_id`，否则会被命令闸门拦下。
 
 ## 配置一览
 
-配置段 `[plugin.bidibot]`，键名同时接受 snake_case 与全大写写法。
+配置段 `[plugin.fengyegf.bidibot]`，键名同时接受 snake_case 与全大写写法。
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -94,14 +94,14 @@ plugins/bidibot/
 
 ## 使用说明
 
-**安装**：从插件商店安装；或 `fuyubot plugin install ./bidibot`；或把发布包解压到 `plugins/bidibot/` 后重启宿主。
+**安装**：从插件商店安装；或 `fuyubot plugin install ./bidibot`；或把发布包解压到 `plugins/fengyegf.bidibot/` 后重启宿主。
 
 **准备群**：建一个开启话题的超级群（Forum），把 bot 拉进去并给「管理话题」权限；群 id 填 `group_id`（负数），主人 user id 填 `owner_id`。
 
 最小配置：
 
 ```toml
-[plugin.bidibot]
+[plugin.fengyegf.bidibot]
 group_id = -1001234567890    # 论坛群 id，0 = 未配置
 owner_id = 123456789         # 主人 user id，0 = 管理命令不可用
 ad_mode = "keyword"          # off | keyword | llm
@@ -124,7 +124,7 @@ cargo build --release -p fuyubot-plugin-bidibot
 python scripts/package.py --plugin bidibot --platform windows-x86_64
 ```
 
-**发布**：`git tag bidibot-v0.1.1 && git push origin bidibot-v0.1.1`。
+**发布**：`git tag fengyegf.bidibot-v0.1.1 && git push origin fengyegf.bidibot-v0.1.1`。
 
 ## 项目依赖（软/硬）
 

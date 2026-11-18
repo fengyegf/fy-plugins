@@ -1,10 +1,10 @@
-//! 运行期配置（`[plugin.rusto]`），构造一次，之后只读。
+//! 运行期配置（`[plugin.fengyegf.rusto]`），构造一次，之后只读。
 //!
-//! 读取顺序与仓库其它插件一致：`start()` 传进来的 JSON → `config_value("rusto", "")` 兜底；
+//! 读取顺序与仓库其它插件一致：`start()` 传进来的 JSON → `config_value("fengyegf.rusto", "")` 兜底；
 //! 缺键退回缺省值。宿主没有配置热重载通道，改 `fuyubot.toml` 需要重载插件。
 //!
 //! ```toml
-//! [plugin.rusto]
+//! [plugin.fengyegf.rusto]
 //! auto = false                  # 私聊直接发图是否自动识别（默认只认命令）
 //! max_side = 960                # 识别前长边限幅（越小越快）
 //! concurrency = 1               # 同时识别数（引擎重，默认 1）
@@ -24,8 +24,8 @@ use std::time::Duration;
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::Value;
 
-/// 配置段名：`[plugin.rusto]`，同时是插件 id。
-pub const PLUGIN_NAME: &str = "rusto";
+/// 配置段名：`[plugin.fengyegf.rusto]`，同时是插件 id。
+pub const PLUGIN_NAME: &str = "fengyegf.rusto";
 
 /// 缺省模型预设。
 pub const DEFAULT_MODEL: &str = "ppocrv6-tiny-int8";

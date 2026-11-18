@@ -46,9 +46,10 @@ jobs:
             id="${{ inputs.plugin }}"
             version="${{ inputs.version }}"
           else
-            # tag 形如 whois-v0.1.2
+            # tag 形如 fengyegf.whois-v0.1.6（多插件仓库用 <id>-v<版本>）
             ref="${GITHUB_REF_NAME}"
-            id="${ref%%-v*}"
+            plugin_id="${ref%%-v*}"
+            id="${plugin_id##*.}"
             version="${ref#*-v}"
           fi
           python3 scripts/plan.py --plugin "$id" --version "$version" --github-output

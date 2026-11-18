@@ -1,4 +1,4 @@
-# kfc 默认配置：并入 [plugin.kfc]，优先级低于用户配置与运行时落盘值。
+# kfc 默认配置：并入 [plugin.fengyegf.kfc]，优先级低于用户配置与运行时落盘值。
 # 键名、默认值与 src/core/config.rs 一致。
 
 api_url = "https://kfc-crazy-thursday.vercel.app/api/index"

@@ -1,4 +1,4 @@
-# fuyubot-plugin-system 默认配置：最低优先级，宿主会与 [plugin.system] 段合并
+# fuyubot-plugin-system 默认配置：最低优先级，宿主会与 [plugin.fengyegf.system] 段合并
 # super_admin 不写 = 未配置（卡片 admin 一栏显示「未配置」）
 background_url = "https://i0.hdslb.com/bfs/article/cc4a3e435ac47a6190aebf4f74a8675b88a183bb.jpg"
 timeout_ms = 5000

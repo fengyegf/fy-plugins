@@ -83,4 +83,4 @@ impl Plugin for Kfc {
     }
 }
 
-define_plugin!(Kfc, "kfc");
+define_plugin!(Kfc, "fengyegf.kfc");

@@ -1,6 +1,6 @@
 # KFC
 
-插件 id `kfc` · 版本 `0.1.6` · ABI v6 · 平台 windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id `fengyegf.kfc` · 版本 `0.1.6` · ABI v6 · 平台 windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -35,7 +35,7 @@ crates/fuyubot-plugin-kfc/
 部署后的 bundle：
 
 ```text
-plugins/kfc/
+plugins/fengyegf.kfc/
 ├── plugin.json           # entry 指向 bin/kfc.dll
 └── bin/kfc.dll           # Linux 为 libkfc.so，macOS 为 libkfc.dylib
 ```
@@ -46,11 +46,11 @@ plugins/kfc/
 | --- | --- | --- |
 | `/kfc` | `user`；私聊 + 群 | 抓一句文案，渲染卡片并以照片回复原消息；不接受参数，多写的参数会被忽略 |
 
-命令前缀来自 `[plugin.kfc].prefixes`，缺省为 `/`、`!`、`！`、`.`、`#`；命令名大小写不敏感，支持 `/kfc@机器人名` 写法。
+命令前缀来自 `[plugin.fengyegf.kfc].prefixes`，缺省为 `/`、`!`、`！`、`.`、`#`；命令名大小写不敏感，支持 `/kfc@机器人名` 写法。
 
 ## 配置一览
 
-配置段 `[plugin.kfc]`，全部可选，缺失或类型不对时用默认值：
+配置段 `[plugin.fengyegf.kfc]`，全部可选，缺失或类型不对时用默认值：
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -59,16 +59,16 @@ plugins/kfc/
 | `timeout_ms` | `15000` | 拉文案超时（毫秒）；也兼容 `timeout`（秒），同时存在时 `timeout_ms` 优先 |
 | `prefixes` | `["/", "!", "！", ".", "#"]` | 命令前缀列表，空数组或非法值回退默认 |
 
-`config.default.toml` 固化上表默认值，随发布包带入，按最低优先级并入 `[plugin.kfc]`，可被用户配置覆盖。
+`config.default.toml` 固化上表默认值，随发布包带入，按最低优先级并入 `[plugin.fengyegf.kfc]`，可被用户配置覆盖。
 
 ## 使用说明
 
-**安装**：商店里搜索 `kfc` 安装；或 `fuyubot plugin install ./kfc`（指向插件目录或解压后的包）；或把 zip 直接解压到 `plugins/kfc/`，确认根上是 `plugin.json` 与 `bin/`，然后重启 `fuyubot run`。
+**安装**：商店里搜索 `kfc` 安装；或 `fuyubot plugin install ./kfc`（指向插件目录或解压后的包）；或把 zip 直接解压到 `plugins/fengyegf.kfc/`，确认根上是 `plugin.json` 与 `bin/`，然后重启 `fuyubot run`。
 
 **最小配置**（`fuyubot.toml`）：
 
 ```toml
-[plugin.kfc]
+[plugin.fengyegf.kfc]
 api_url = "https://kfc-crazy-thursday.vercel.app/api/index"
 width = 800
 timeout_ms = 15000
@@ -93,8 +93,8 @@ python scripts/package.py --plugin kfc --platform windows-x86_64
 **发布**：
 
 ```bash
-git tag kfc-v0.1.6
-git push origin kfc-v0.1.6
+git tag fengyegf.kfc-v0.1.6
+git push origin fengyegf.kfc-v0.1.6
 ```
 
 ## 项目依赖（软/硬）

@@ -1,6 +1,6 @@
 # Whois
 
-插件 id `whois` · 版本 `0.1.5` · Native ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id `fengyegf.whois` · 版本 `0.1.5` · Native ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -21,7 +21,7 @@
 ```text
 plugin.json          # 插件元信息、entry 与 ABI 声明
 Cargo.toml           # cdylib + rlib 双目标，lib name = whois
-config.default.toml  # 默认配置（最低优先级，会被 [plugin.whois] 覆盖）
+config.default.toml  # 默认配置（最低优先级，会被 [plugin.fengyegf.whois] 覆盖）
 README.md
 assets/card.html     # 卡片界面：<style> + Vue 模板
 examples/render_card_whois.rs
@@ -37,7 +37,7 @@ src/
 部署后（原生插件目录，ZIP 根即目录内容）：
 
 ```text
-plugins/whois/
+plugins/fengyegf.whois/
   plugin.json
   bin/whois.dll      # Linux: libwhois.so；macOS: libwhois.dylib；Android: libwhois.so
 ```
@@ -48,11 +48,11 @@ plugins/whois/
 | --- | --- | --- |
 | `/whois <域名>` | `user`，私聊 / 群聊 | 查询域名 Whois 与 IP 归属，渲染信息卡片并以照片回复 |
 
-命令前缀来自 `[plugin.whois].prefixes`；未配置时跟随宿主 `[config].PREFIXES`，最后回退到 `/ ! ！ . #`。
+命令前缀来自 `[plugin.fengyegf.whois].prefixes`；未配置时跟随宿主 `[config].PREFIXES`，最后回退到 `/ ! ！ . #`。
 
 ## 配置一览
 
-配置段 `[plugin.whois]`，所有字段可选：
+配置段 `[plugin.fengyegf.whois]`，所有字段可选：
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -68,12 +68,12 @@ plugins/whois/
 
 ## 使用说明
 
-**安装**：在插件商店安装；或 `fuyubot plugin install ./whois`；或把发布包解压到 `plugins/whois/` 后重启宿主。
+**安装**：在插件商店安装；或 `fuyubot plugin install ./whois`；或把发布包解压到 `plugins/fengyegf.whois/` 后重启宿主。
 
 **最小配置**：
 
 ```toml
-[plugin.whois]
+[plugin.fengyegf.whois]
 whois_api_url = "https://whoiscx.com/api/whois/info/"
 ip_api_url = "https://whoiscx.com/api/whois/ip/"
 width = 1200
@@ -99,7 +99,7 @@ python scripts/package.py --plugin whois --platform windows-x86_64
 **发布**：打 `<id>-v<version>` 形式的 tag 并推送，CI 构建 `plugin.json` 声明的平台。
 
 ```bash
-git tag whois-v0.1.5 && git push origin whois-v0.1.5
+git tag fengyegf.whois-v0.1.5 && git push origin fengyegf.whois-v0.1.5
 ```
 
 ## 项目依赖（软/硬）

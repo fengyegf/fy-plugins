@@ -1,6 +1,6 @@
 # System
 
-插件 id：`system` ｜ 版本：0.1.5 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id：`fengyegf.system` ｜ 版本：0.1.5 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -36,7 +36,7 @@ crates/fuyubot-plugin-system/
 部署后的 bundle（zip 根就是插件目录内容）：
 
 ```text
-plugins/system/
+plugins/fengyegf.system/
 ├─ plugin.json
 ├─ config.default.toml
 └─ bin/system.dll              # Linux: libsystem.so；macOS: libsystem.dylib
@@ -48,11 +48,11 @@ plugins/system/
 | --- | --- | --- |
 | `/system` | 无权限判断（登记 `role=user`），私聊 / 群聊 | 采集系统信息、TDLib 资料与插件清单，出卡片并回复照片 |
 
-命令名后的参数不会被读取；`/system@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀。命令前缀来自 `[plugin.system].prefixes`，未配置时跟随宿主 `[config].PREFIXES`。
+命令名后的参数不会被读取；`/system@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀。命令前缀来自 `[plugin.fengyegf.system].prefixes`，未配置时跟随宿主 `[config].PREFIXES`。
 
 ## 配置一览
 
-配置段：`[plugin.system]`，字段全部可选。
+配置段：`[plugin.fengyegf.system]`，字段全部可选。
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -70,12 +70,12 @@ plugins/system/
 
 - 插件商店直接安装；或
 - 源码目录：`fuyubot plugin install ./system`；或
-- 手动解压 zip 到宿主的 `plugins/system/` 后重启宿主。
+- 手动解压 zip 到宿主的 `plugins/fengyegf.system/` 后重启宿主。
 
 **最小配置**（`fuyubot.toml`）：
 
 ```toml
-[plugin.system]
+[plugin.fengyegf.system]
 super_admin = 123456789
 timeout_ms = 5000
 avatar_timeout_ms = 20000
@@ -98,13 +98,13 @@ cargo build --release -p fuyubot-plugin-system
 python scripts/package.py --plugin system --platform windows-x86_64
 ```
 
-产出 `target/release/system.dll` 与 `system-0.1.5-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/system.dll`）。
+产出 `target/release/system.dll` 与 `fengyegf.system-0.1.5-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/system.dll`）。
 
 **发布**
 
 ```bash
-git tag system-v0.1.5
-git push origin system-v0.1.5
+git tag fengyegf.system-v0.1.5
+git push origin fengyegf.system-v0.1.5
 ```
 
 tag 名固定为 `<id>-v<version>`；同一版本已打过 tag 时，先递增 `plugin.json` 的版本号再打新 tag。

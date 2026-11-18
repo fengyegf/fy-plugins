@@ -1,7 +1,7 @@
 //! 命令前缀解析。
 //!
 //! 这里只做"文本 → 命令名 + 参数"的机械翻译，不认任何具体命令名：前缀表来自配置
-//! （`[plugin.bidibot].prefixes`），分派留给 [`crate::cmd`]。
+//! （`[plugin.fengyegf.bidibot].prefixes`），分派留给 [`crate::cmd`]。
 //!
 //! 为什么按前缀解析而不是按 Telegram 的 bot_command entity：宿主投给插件的是纯文本
 //! 消息，用户手打 `/bidihelp` 和点菜单发出来的命令都要能认；统一按前缀处理还能让

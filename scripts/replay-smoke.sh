@@ -26,18 +26,18 @@ CARGO_PROFILE_DEV_DEBUG=0 cargo build --workspace --offline
 echo "== 组装临时插件目录 $OUT/plugins"
 rm -rf "$OUT"
 mkdir -p "$OUT/plugins"
-stage() { # $1=id $2=target/debug 里的 dll $3=plugin.json 声明的 entry
-  mkdir -p "$OUT/plugins/$1/$(dirname "$3")"
-  cp "crates/fuyubot-plugin-$1/plugin.json" "$OUT/plugins/$1/plugin.json"
-  cp "target/debug/$2" "$OUT/plugins/$1/$3"
+stage() { # $1=插件 id（作者.插件名） $2=crate 短名 $3=target/debug 里的 dll $4=plugin.json 声明的 entry
+  mkdir -p "$OUT/plugins/$1/$(dirname "$4")"
+  cp "crates/fuyubot-plugin-$2/plugin.json" "$OUT/plugins/$1/plugin.json"
+  cp "target/debug/$3" "$OUT/plugins/$1/$4"
 }
-stage epic      epic.dll      bin/epic.dll
-stage kfc       kfc.dll       bin/kfc.dll
-stage musiccard musiccard.dll bin/musiccard.dll
-stage ppxfy     ppxfy.dll     bin/ppxfy.dll
-stage system    system.dll    bin/system.dll
-stage trending  trending.dll  bin/trending.dll
-stage whois     whois.dll     bin/whois.dll
+stage fengyegf.epic      epic      epic.dll      bin/epic.dll
+stage fengyegf.kfc       kfc       kfc.dll       bin/kfc.dll
+stage fengyegf.musiccard musiccard musiccard.dll bin/musiccard.dll
+stage fengyegf.ppxfy     ppxfy     ppxfy.dll     bin/ppxfy.dll
+stage fengyegf.system    system    system.dll    bin/system.dll
+stage fengyegf.trending  trending  trending.dll  bin/trending.dll
+stage fengyegf.whois     whois     whois.dll     bin/whois.dll
 
 # html2img 是 epic / kfc / musiccard / system / trending / whois 的硬依赖（不在本仓），从宿主目录借一份；
 # fuyubot.mongo 是 ppxfy 的可选软依赖，一并带上，缺了也不影响启动。

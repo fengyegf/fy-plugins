@@ -1,9 +1,9 @@
 //! 运行期配置。
 //!
-//! 全部来自宿主的 `[plugin.trending]` 段（`fuyubot.toml`）。
+//! 全部来自宿主的 `[plugin.fengyegf.trending]` 段（`fuyubot.toml`）。
 //!
 //! ```toml
-//! [plugin.trending]
+//! [plugin.fengyegf.trending]
 //! trending_url = "https://github.com/trending" # 榜单页地址
 //! width        = 1600    # 卡片宽度（px），夹到 1200–1920
 //! timeout_ms   = 15000   # 抓取超时
@@ -13,7 +13,7 @@
 //! prefixes     = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
 //! ```
 //!
-//! 读取顺序：`start()` 传进来的配置 JSON → `get_config("trending", "")` 兜底；
+//! 读取顺序：`start()` 传进来的配置 JSON → `get_config("fengyegf.trending", "")` 兜底；
 //! 两者缺什么就各自退回缺省值。命令前缀的第三层兜底是宿主顶层
 //! `[config].PREFIXES`。
 
@@ -22,8 +22,8 @@ use std::time::Duration;
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::Value;
 
-/// 插件段名：`[plugin.trending]`。
-pub const PLUGIN_NAME: &str = "trending";
+/// 插件段名：`[plugin.fengyegf.trending]`。
+pub const PLUGIN_NAME: &str = "fengyegf.trending";
 
 /// 榜单页缺省地址（`?since=daily|weekly|monthly` 由抓取层拼）。
 pub const DEFAULT_TRENDING_URL: &str = "https://github.com/trending";

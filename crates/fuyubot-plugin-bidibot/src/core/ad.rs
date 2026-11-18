@@ -71,7 +71,7 @@ impl AdJudge {
         }
     }
 
-    /// 覆盖问模型的超时（relay 会把 [plugin.bidibot].ai_timeout_ms 传进来）。
+    /// 覆盖问模型的超时（relay 会把 [plugin.fengyegf.bidibot].ai_timeout_ms 传进来）。
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout.clamp(Duration::from_secs(1), Duration::from_secs(120));
         self

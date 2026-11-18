@@ -80,4 +80,4 @@ impl Plugin for Trending {
     }
 }
 
-define_plugin!(Trending, "trending");
+define_plugin!(Trending, "fengyegf.trending");

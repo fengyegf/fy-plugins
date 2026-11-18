@@ -1,6 +1,6 @@
 # RustO OCR
 
-rusto · v0.1.1 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+fengyegf.rusto · v0.1.1 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -25,7 +25,7 @@ crates/fuyubot-plugin-rusto/
 ├── models/ppocrv6-tiny-int8/ # 内置模型：det.mnn / rec.mnn / dict.txt / SHA256SUMS
 ├── src/
 │   ├── lib.rs                # 生命周期：配置、worker、命令表、服务与工具
-│   ├── core/                 # config.rs（[plugin.rusto]）、error.rs
+│   ├── core/                 # config.rs（[plugin.fengyegf.rusto]）、error.rs
 │   ├── engine/               # OcrBackend 接缝、EnginePool、models.rs、rusto_backend.rs
 │   ├── host/                 # command / download / messenger / photo / worker / service
 │   └── cmd/                  # parser.rs（命令解析）、ocr.rs（业务）、mod.rs
@@ -35,7 +35,7 @@ crates/fuyubot-plugin-rusto/
 部署后（bundle 解压到宿主插件目录）：
 
 ```text
-plugins/rusto/
+plugins/fengyegf.rusto/
 ├── plugin.json
 ├── config.default.toml
 ├── NOTICE.md
@@ -54,11 +54,11 @@ plugins/rusto/
 | `/ocr path <本机路径>` | user · 私聊 / 群 | 识别本机图片，不经过 TDLib 下载（排障用） |
 | `/ocr help`（`-h`、`--help`、`帮助`） | user · 私聊 / 群 | 用法提示 |
 
-命令名前缀为 `/`、`!`、`！`、`.`、`#`，命令名是 `ocr`，也接受插件名 `rusto`；前缀硬编码在 `src/cmd/parser.rs`，**不读** `[plugin.rusto].prefixes` 或宿主 `[config].PREFIXES`。插件自身不做权限判断，`/ocr` 以 `role = user`、`scopes = private/group` 登记到宿主 `fuyubot.host.commands`（登记失败只影响 `/help` 一行）。未识别的子命令会退回普通 `/ocr`。
+命令名前缀为 `/`、`!`、`！`、`.`、`#`，命令名是 `ocr`，也接受插件名 `rusto`；前缀硬编码在 `src/cmd/parser.rs`，**不读** `[plugin.fengyegf.rusto].prefixes` 或宿主 `[config].PREFIXES`。插件自身不做权限判断，`/ocr` 以 `role = user`、`scopes = private/group` 登记到宿主 `fuyubot.host.commands`（登记失败只影响 `/help` 一行）。未识别的子命令会退回普通 `/ocr`。
 
 ## 配置一览
 
-配置段：`[plugin.rusto]`。下表默认值与 `src/core/config.rs` 一致。
+配置段：`[plugin.fengyegf.rusto]`。下表默认值与 `src/core/config.rs` 一致。
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -78,19 +78,19 @@ plugins/rusto/
 
 ## 使用说明
 
-**安装**（三选一）：插件商店直接安装；`fuyubot plugin install ./rusto`；或把 bundle 解压到 `plugins/rusto/`（`plugin.json` 在根、动态库在 `bin/`）后重启宿主。
+**安装**（三选一）：插件商店直接安装；`fuyubot plugin install ./rusto`；或把 bundle 解压到 `plugins/fengyegf.rusto/`（`plugin.json` 在根、动态库在 `bin/`）后重启宿主。
 
 **最小配置**（`fuyubot.toml`）：
 
 ```toml
-[plugin.rusto]
+[plugin.fengyegf.rusto]
 auto = false
 max_side = 960
 concurrency = 1
 model = "ppocrv6-tiny-int8"
 # 国内网络 / 离线部署时按需打开：
 # mirror = "https://hf-mirror.com"
-# model_dir = "C:/fuyubot/plugins/rusto/models"
+# model_dir = "C:/fuyubot/plugins/fengyegf.rusto/models"
 ```
 
 **典型用法**：对图片消息回复 `/ocr`；或直接在图片说明里写 `/ocr`；要看行级明细用 `/ocr detail`。部署后先 `/ocr warm`，再用 `/ocr status` 确认 `loaded = true`。默认先回「识别中…」再编辑成结果，超长文本按 `chunk_size` 分块并带「（1/N）」；没有图片会回复用法提示。
@@ -104,13 +104,13 @@ cargo build --release -p fuyubot-plugin-rusto
 python scripts/package.py --plugin rusto --platform windows-x86_64
 ```
 
-`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/rusto-0.1.1-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
+`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/fengyegf.rusto-0.1.1-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
 
 **发布**：
 
 ```bash
-git tag rusto-v0.1.1
-git push origin rusto-v0.1.1
+git tag fengyegf.rusto-v0.1.1
+git push origin fengyegf.rusto-v0.1.1
 ```
 
 ## 项目依赖（软/硬）

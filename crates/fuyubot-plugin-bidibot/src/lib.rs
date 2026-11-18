@@ -25,8 +25,8 @@ use fuyubot_plugin_api::{HostApi, HostExt, Plugin, Subscription, define_plugin};
 use crate::core::Config;
 use crate::host::Worker;
 
-/// 插件名：同时是 [plugin.bidibot] 段名。
-pub const PLUGIN_NAME: &str = "bidibot";
+/// 插件名：同时是 [plugin.fengyegf.bidibot] 段名。
+pub const PLUGIN_NAME: &str = "fengyegf.bidibot";
 
 struct Bidibot {
     host: HostApi,
@@ -48,12 +48,12 @@ impl Plugin for Bidibot {
         let config = Config::load(&self.host, config_json);
         if config.group_id == 0 {
             self.host.warn(
-                "bidibot: [plugin.bidibot].group_id 还没配置——私聊消息只回「暂时不可用」，不会转发进群",
+                "bidibot: [plugin.fengyegf.bidibot].group_id 还没配置——私聊消息只回「暂时不可用」，不会转发进群",
             );
         }
         if config.owner_id == 0 {
             self.host.warn(
-                "bidibot: [plugin.bidibot].owner_id 还没配置——群里任何人的回复都不会转给用户（只能看不能回）",
+                "bidibot: [plugin.fengyegf.bidibot].owner_id 还没配置——群里任何人的回复都不会转给用户（只能看不能回）",
             );
         }
         let worker = Worker::start(self.host, config.clone())?;
@@ -116,4 +116,4 @@ extern "C-unwind" fn on_update(
     crate::host::worker::on_update(user, payload)
 }
 
-define_plugin!(Bidibot, "bidibot");
+define_plugin!(Bidibot, "fengyegf.bidibot");

@@ -1,4 +1,4 @@
-//! 运行期配置：全部来自宿主 [plugin.bidibot] 段（fuyubot.toml）。
+//! 运行期配置：全部来自宿主 [plugin.fengyegf.bidibot] 段（fuyubot.toml）。
 //!
 //! 缺省值对一份"什么都没配"的 toml 也安全：owner_id = 0 时插件只做基础命令，
 //! 不会往任何地方中转。键名同时接受 snake_case 与全大写写法。

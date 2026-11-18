@@ -85,4 +85,4 @@ impl Plugin for Whois {
     }
 }
 
-define_plugin!(Whois, "whois");
+define_plugin!(Whois, "fengyegf.whois");

@@ -96,4 +96,4 @@ impl Plugin for MusicCard {
     }
 }
 
-define_plugin!(MusicCard, "musiccard");
+define_plugin!(MusicCard, "fengyegf.musiccard");

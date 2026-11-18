@@ -1,4 +1,4 @@
-# whois 默认配置：最低优先级，会被 fuyubot.toml 的 [plugin.whois] 覆盖。
+# whois 默认配置：最低优先级，会被 fuyubot.toml 的 [plugin.fengyegf.whois] 覆盖。
 whois_api_url = "https://whoiscx.com/api/whois/info/"
 ip_api_url = "https://whoiscx.com/api/whois/ip/"
 width = 1200

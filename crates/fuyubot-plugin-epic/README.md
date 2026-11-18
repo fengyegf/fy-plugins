@@ -1,6 +1,6 @@
 # Epic
 
-插件 id `epic` · 版本 `0.1.5` · Native ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id `fengyegf.epic` · 版本 `0.1.5` · Native ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -20,7 +20,7 @@
 ```text
 plugin.json          # 插件元信息、entry 与 ABI 声明
 Cargo.toml           # cdylib + rlib 双目标，lib name = epic
-config.default.toml  # 默认配置（最低优先级，会被 [plugin.epic] 覆盖）
+config.default.toml  # 默认配置（最低优先级，会被 [plugin.fengyegf.epic] 覆盖）
 README.md
 assets/card.html     # 卡片界面：<style> + Vue 模板
 examples/render_card_epic.rs
@@ -36,7 +36,7 @@ src/
 部署后（原生插件目录，ZIP 根即目录内容）：
 
 ```text
-plugins/epic/
+plugins/fengyegf.epic/
   plugin.json
   bin/epic.dll       # Linux: libepic.so；macOS: libepic.dylib；Android: libepic.so
 ```
@@ -48,11 +48,11 @@ plugins/epic/
 | `/epic` | `user`，私聊 / 群聊 | 查询当前免费与即将免费的游戏，出卡片图 |
 | `/epicfree` | `user`，私聊 / 群聊 | 与 `/epic` 完全等价的别名 |
 
-命令前缀只跟随宿主 `[config].PREFIXES`（缺省 `/ ! ！ . #`），本插件不读 `[plugin.epic].prefixes`。
+命令前缀只跟随宿主 `[config].PREFIXES`（缺省 `/ ! ！ . #`），本插件不读 `[plugin.fengyegf.epic].prefixes`。
 
 ## 配置一览
 
-配置段 `[plugin.epic]`，所有字段可选：
+配置段 `[plugin.fengyegf.epic]`，所有字段可选：
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -74,12 +74,12 @@ plugins/epic/
 
 ## 使用说明
 
-**安装**：在插件商店安装；或 `fuyubot plugin install ./epic`；或把发布包解压到 `plugins/epic/` 后重启宿主。宿主需已安装 `fuyubot.html2img`。
+**安装**：在插件商店安装；或 `fuyubot plugin install ./epic`；或把发布包解压到 `plugins/fengyegf.epic/` 后重启宿主。宿主需已安装 `fuyubot.html2img`。
 
 **最小配置**：
 
 ```toml
-[plugin.epic]
+[plugin.fengyegf.epic]
 locale = "zh-CN"
 country = "CN"
 timezone_offset_hours = 8
@@ -105,7 +105,7 @@ python scripts/package.py --plugin epic --platform windows-x86_64
 **发布**：打 `<id>-v<version>` 形式的 tag 并推送，CI 构建 `plugin.json` 声明的平台。
 
 ```bash
-git tag epic-v0.1.5 && git push origin epic-v0.1.5
+git tag fengyegf.epic-v0.1.5 && git push origin fengyegf.epic-v0.1.5
 ```
 
 ## 项目依赖（软/硬）

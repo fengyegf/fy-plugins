@@ -1,4 +1,4 @@
-# ppxfy 默认配置（最低优先级，[plugin.ppxfy] 中同名键会覆盖）
+# ppxfy 默认配置（最低优先级，[plugin.fengyegf.ppxfy] 中同名键会覆盖）
 cache_dir = "cache"
 listen_timeout_ms = 600000
 unzip_timeout_ms = 1800000

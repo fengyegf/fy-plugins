@@ -1,6 +1,6 @@
 # PPXFY（DMM / DLSite 下载与分享）
 
-`ppxfy` · v0.1.6 · ABI v6 · Windows x86_64 / Linux x86_64 / macOS aarch64
+`fengyegf.ppxfy` · v0.1.6 · ABI v6 · Windows x86_64 / Linux x86_64 / macOS aarch64
 
 ## 项目介绍
 
@@ -34,7 +34,7 @@ crates/fuyubot-plugin-ppxfy/
 部署后（ZIP 根 = 插件目录内容）：
 
 ```text
-plugins/ppxfy/
+plugins/fengyegf.ppxfy/
   plugin.json
   bin/ppxfy.dll          # Linux: libppxfy.so / macOS: libppxfy.dylib
   config.default.toml
@@ -53,7 +53,7 @@ plugins/ppxfy/
 
 ## 配置一览
 
-配置段 `[plugin.ppxfy]`，键名同时接受 snake_case 与全大写写法。
+配置段 `[plugin.fengyegf.ppxfy]`，键名同时接受 snake_case 与全大写写法。
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -72,16 +72,16 @@ plugins/ppxfy/
 | `mongo_collection` | `ppxfy_galgame` | 作品记录集合（经 `storage.mongo` 读写） |
 | `mongodb_db` | 空（用服务端库） | 覆盖 mongo-plugin 的默认库名，不写 = 用服务端配置 |
 
-凭据类字段（`telegraph_token` / `dlsite_proxy`）取值优先级：配置段 > 环境变量（`PPXFY_TELEGRAPH_TOKEN`、`PPXFY_DLSITE_PROXY`）> 运行目录或 `plugins/ppxfy/.env`。
+凭据类字段（`telegraph_token` / `dlsite_proxy`）取值优先级：配置段 > 环境变量（`PPXFY_TELEGRAPH_TOKEN`、`PPXFY_DLSITE_PROXY`）> 运行目录或 `plugins/fengyegf.ppxfy/.env`。
 
 ## 使用说明
 
-**安装**：从插件商店安装；或 `fuyubot plugin install ./ppxfy`；或把发布包解压到 `plugins/ppxfy/` 后重启宿主。
+**安装**：从插件商店安装；或 `fuyubot plugin install ./ppxfy`；或把发布包解压到 `plugins/fengyegf.ppxfy/` 后重启宿主。
 
 最小配置：
 
 ```toml
-[plugin.ppxfy]
+[plugin.fengyegf.ppxfy]
 cache_dir = "cache"
 listen_timeout_ms = 600000
 download_concurrency = 4
@@ -103,7 +103,7 @@ cargo build --release -p fuyubot-plugin-ppxfy
 python scripts/package.py --plugin ppxfy --platform windows-x86_64
 ```
 
-**发布**：`git tag ppxfy-v0.1.6 && git push origin ppxfy-v0.1.6`。
+**发布**：`git tag fengyegf.ppxfy-v0.1.6 && git push origin fengyegf.ppxfy-v0.1.6`。
 
 ## 项目依赖（软/硬）
 

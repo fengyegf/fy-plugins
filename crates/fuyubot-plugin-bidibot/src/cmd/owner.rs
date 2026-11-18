@@ -385,7 +385,7 @@ fn del_word(ctx: &Arc<Ctx>, message: &IncomingMessage, word: String) {
                 ctx,
                 message,
                 &format!(
-                    "ℹ️ 「{word}」来自配置文件的 ad_keywords，命令删不掉：改 fuyubot.toml 里的 [plugin.bidibot].ad_keywords 后重启。"
+                    "ℹ️ 「{word}」来自配置文件的 ad_keywords，命令删不掉：改 fuyubot.toml 里的 [plugin.fengyegf.bidibot].ad_keywords 后重启。"
                 ),
             );
         } else if DEFAULT_AD_KEYWORDS.contains(&word.as_str()) {
@@ -439,7 +439,7 @@ pub fn render_words(config: &Config, limit: usize) -> String {
     if effective.len() > limit {
         let hidden = effective.len() - limit;
         out.push_str(&format!(
-            "……还有 {hidden} 个没显示，完整的在 fuyubot.toml 的 [plugin.bidibot] 里。\n"
+            "……还有 {hidden} 个没显示，完整的在 fuyubot.toml 的 [plugin.fengyegf.bidibot] 里。\n"
         ));
     }
     out.push_str("\n/bidiword add <词> 追加；/bidiword del <词> 只删追加表；配置里的词请改 toml。");

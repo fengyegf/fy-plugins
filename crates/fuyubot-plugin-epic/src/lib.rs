@@ -85,4 +85,4 @@ extern "C-unwind" fn on_update(
     crate::host::worker::on_update(user, payload)
 }
 
-define_plugin!(Epic, "epic");
+define_plugin!(Epic, "fengyegf.epic");

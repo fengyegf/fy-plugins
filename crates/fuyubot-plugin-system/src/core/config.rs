@@ -1,9 +1,9 @@
 //! 运行期配置。
 //!
-//! 全部来自宿主的 `[plugin.system]` 段（`fuyubot.toml`）；缺省值与 TS 版写死的常量一致。
+//! 全部来自宿主的 `[plugin.fengyegf.system]` 段（`fuyubot.toml`）；缺省值与 TS 版写死的常量一致。
 //!
 //! ```toml
-//! [plugin.system]
+//! [plugin.fengyegf.system]
 //! super_admin   = 123456789      # 超级管理员 user id；不配就没有 admin 卡片
 //! background_url = "https://…"   # 卡片背景图（公网 URL，由 html2img 拉取）；留空 = 纯渐变
 //! timeout_ms     = 5000          # 单次 TDLib 调用超时
@@ -11,15 +11,15 @@
 //! ```
 //!
 //! 读取顺序：`start()` 传进来的配置 JSON（宿主给的 `plugins_dir` 等）→
-//! `get_config("system", "")` 兜底；两者缺什么就各自退回缺省值。
+//! `get_config("fengyegf.system", "")` 兜底；两者缺什么就各自退回缺省值。
 
 use std::time::Duration;
 
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::Value;
 
-/// 插件段名：`[plugin.system]`。
-pub const PLUGIN_NAME: &str = "system";
+/// 插件段名：`[plugin.fengyegf.system]`。
+pub const PLUGIN_NAME: &str = "fengyegf.system";
 
 /// TS 版 `system.vue` 里写死的背景图；默认沿用它，作为公网 URL 直接写进 HTML。
 pub const DEFAULT_BACKGROUND_URL: &str =

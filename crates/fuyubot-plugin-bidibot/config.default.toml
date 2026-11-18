@@ -1,4 +1,4 @@
-# bidibot 默认配置（最低优先级，[plugin.bidibot] 中同名键会覆盖）
+# bidibot 默认配置（最低优先级，[plugin.fengyegf.bidibot] 中同名键会覆盖）
 group_id = 0
 owner_id = 0
 ad_mode = "keyword"

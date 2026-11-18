@@ -1,10 +1,10 @@
 //! 插件配置。
 //!
-//! 全部来自宿主的 `[plugin.epic]` 段（`fuyubot.toml`），命令前缀复用顶层
+//! 全部来自宿主的 `[plugin.fengyegf.epic]` 段（`fuyubot.toml`），命令前缀复用顶层
 //! `[config] PREFIXES`。
 //!
 //! ```toml
-//! [plugin.epic]
+//! [plugin.fengyegf.epic]
 //! locale = "zh-CN"                    # 接口语言
 //! country = "CN"                      # 接口国家
 //! timezone_offset_hours = 8           # 日期换算时区（北京时间）
@@ -25,8 +25,8 @@ use std::time::Duration;
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::{Map, Value};
 
-/// 插件段名：`[plugin.epic]`。
-pub const PLUGIN_NAME: &str = "epic";
+/// 插件段名：`[plugin.fengyegf.epic]`。
+pub const PLUGIN_NAME: &str = "fengyegf.epic";
 
 /// Epic 官方促销接口；允许配置覆盖（换区域 / 镜像）。
 pub const DEFAULT_API_URL: &str =

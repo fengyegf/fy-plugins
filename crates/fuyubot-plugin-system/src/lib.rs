@@ -93,4 +93,4 @@ fn plugins_dir_from(config_json: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-define_plugin!(SystemPlugin, "system");
+define_plugin!(SystemPlugin, "fengyegf.system");

@@ -1,10 +1,10 @@
 //! 运行期配置。
 //!
-//! 全部来自宿主的 `[plugin.whois]` 段（`fuyubot.toml`），键名同时接受 snake_case
+//! 全部来自宿主的 `[plugin.fengyegf.whois]` 段（`fuyubot.toml`），键名同时接受 snake_case
 //! 与大写写法。
 //!
 //! ```toml
-//! [plugin.whois]
+//! [plugin.fengyegf.whois]
 //! whois_api_url = "https://whoiscx.com/api/whois/info/" # whois 接口
 //! ip_api_url    = "https://whoiscx.com/api/whois/ip/"   # IP 归属接口
 //! width         = 1200   # 卡片宽度（px），夹到 900–1600
@@ -14,7 +14,7 @@
 //! prefixes      = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
 //! ```
 //!
-//! 读取顺序：`start()` 传进来的配置 JSON → `get_config("whois", "")` 兜底；
+//! 读取顺序：`start()` 传进来的配置 JSON → `get_config("fengyegf.whois", "")` 兜底；
 //! 两者缺什么就各自退回缺省值。命令前缀的第三层兜底是宿主顶层
 //! `[config].PREFIXES`；没有这个键时继续用缺省值。
 
@@ -23,8 +23,8 @@ use std::time::Duration;
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::Value;
 
-/// 插件段名：`[plugin.whois]`。
-pub const PLUGIN_NAME: &str = "whois";
+/// 插件段名：`[plugin.fengyegf.whois]`。
+pub const PLUGIN_NAME: &str = "fengyegf.whois";
 
 /// Whois 查询接口的缺省地址。
 pub const DEFAULT_WHOIS_API_URL: &str = "https://whoiscx.com/api/whois/info/";

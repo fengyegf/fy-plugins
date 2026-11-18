@@ -1,4 +1,4 @@
-# epic 默认配置：最低优先级，会被 fuyubot.toml 的 [plugin.epic] 覆盖。
+# epic 默认配置：最低优先级，会被 fuyubot.toml 的 [plugin.fengyegf.epic] 覆盖。
 api_url = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions"
 locale = "zh-CN"
 country = "CN"

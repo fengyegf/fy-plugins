@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "id": "bidibot",
+  "id": "fengyegf.bidibot",
   "name": "Bidibot 双向私聊",
   "version": "0.1.1",
   "kind": "native",

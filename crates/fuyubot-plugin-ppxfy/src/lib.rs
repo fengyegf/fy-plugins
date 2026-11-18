@@ -89,4 +89,4 @@ impl Plugin for Ppxfy {
     }
 }
 
-define_plugin!(Ppxfy, "ppxfy");
+define_plugin!(Ppxfy, "fengyegf.ppxfy");

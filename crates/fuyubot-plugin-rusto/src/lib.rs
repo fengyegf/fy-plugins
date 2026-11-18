@@ -92,4 +92,4 @@ impl Plugin for Rusto {
     }
 }
 
-define_plugin!(Rusto, "rusto");
+define_plugin!(Rusto, "fengyegf.rusto");

@@ -13,7 +13,7 @@
 //!
 //! 两点与 TS 版不同（都是宿主能力决定的，见 README 的「与 TS 版的差异」）：
 //!
-//! - 管理员改成可选的 `[plugin.system] super_admin` 配置——Rust 宿主没有 TS 版那套
+//! - 管理员改成可选的 `[plugin.fengyegf.system] super_admin` 配置——Rust 宿主没有 TS 版那套
 //!   `[admin]` 数据库段；
 //! - 插件清单只有名字与状态（宿主 `list_plugins` 的字段），没有版本号。
 //!
@@ -90,7 +90,7 @@ impl PluginChip {
 pub struct CardData {
     /// 机器人自己（`getMe`）。
     pub bot: Identity,
-    /// 配置里的超级管理员（`[plugin.system] super_admin` + `getUser`）；没配就是 `None`。
+    /// 配置里的超级管理员（`[plugin.fengyegf.system] super_admin` + `getUser`）；没配就是 `None`。
     pub admin: Option<Identity>,
     /// TDLib 版本。
     pub tdlib: TdlibInfo,
@@ -104,7 +104,7 @@ pub struct CardData {
 
 /// 渲染所需的位图素材（取不到就是 `None`，渲染层画占位图）。
 ///
-/// 背景不在这里：它只是一条公网 URL（`[plugin.system] background_url`），由
+/// 背景不在这里：它只是一条公网 URL（`[plugin.fengyegf.system] background_url`），由
 /// html2img 自己加载，本进程不再下载 / 缓存图片字节。
 #[derive(Debug, Clone, Default)]
 pub struct Assets {

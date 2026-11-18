@@ -1,6 +1,6 @@
 # MusicCard
 
-插件 id `musiccard` · 版本 `0.1.5` · ABI v6 · 平台 windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id `fengyegf.musiccard` · 版本 `0.1.5` · ABI v6 · 平台 windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -25,7 +25,7 @@ crates/fuyubot-plugin-musiccard/
 ├── examples/             # full_card / netease_probe / render_card_musiccard
 └── src/
     ├── lib.rs            # Plugin 生命周期、inject 声明
-    ├── config.rs         # [plugin.musiccard] 配置
+    ├── config.rs         # [plugin.fengyegf.musiccard] 配置
     ├── help.rs           # 把 /musiccard 登记进宿主命令表
     ├── model.rs          # 歌词行等共享模型
     ├── cmd/              # mod / musiccard / parser
@@ -38,7 +38,7 @@ crates/fuyubot-plugin-musiccard/
 部署后的 bundle：
 
 ```text
-plugins/musiccard/
+plugins/fengyegf.musiccard/
 ├── plugin.json           # entry 指向 bin/musiccard.dll
 └── bin/musiccard.dll     # Linux 为 libmusiccard.so，macOS 为 libmusiccard.dylib
 ```
@@ -49,26 +49,26 @@ plugins/musiccard/
 | --- | --- | --- |
 | `/musiccard <歌曲ID / 链接 / 关键词>` | `user`；私聊 + 群 | 取歌、选歌词、渲染 650×1220 音乐卡片并以照片回复；无参数时回用法提示 |
 
-命令前缀来自宿主顶层 `[config].PREFIXES`，缺省为 `/`、`!`、`！`、`.`、`#`；`[plugin.musiccard]` 没有 `prefixes` 键。命令名大小写不敏感，支持 `/musiccard@机器人名`，关键词可按空格分隔。
+命令前缀来自宿主顶层 `[config].PREFIXES`，缺省为 `/`、`!`、`！`、`.`、`#`；`[plugin.fengyegf.musiccard]` 没有 `prefixes` 键。命令名大小写不敏感，支持 `/musiccard@机器人名`，关键词可按空格分隔。
 
 ## 配置一览
 
-配置段 `[plugin.musiccard]`，全部可选：
+配置段 `[plugin.fengyegf.musiccard]`，全部可选：
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
 | `request_timeout_ms` | `15000` | 普通接口超时（毫秒，最小 1）；当前取数层固定用 15s，该字段读取后只写入启动日志，修改它暂不改变实际请求 |
 
-`config.default.toml` 固化上表默认值，随发布包带入，按最低优先级并入 `[plugin.musiccard]`，可被用户配置覆盖。命令前缀不属于插件段，读宿主 `[config].PREFIXES`；老配置里残留的 `temp_dir` 会被安静忽略。
+`config.default.toml` 固化上表默认值，随发布包带入，按最低优先级并入 `[plugin.fengyegf.musiccard]`，可被用户配置覆盖。命令前缀不属于插件段，读宿主 `[config].PREFIXES`；老配置里残留的 `temp_dir` 会被安静忽略。
 
 ## 使用说明
 
-**安装**：商店里搜索 `musiccard` 安装；或 `fuyubot plugin install ./musiccard`（指向插件目录或解压后的包）；或把 zip 直接解压到 `plugins/musiccard/`，确认根上是 `plugin.json` 与 `bin/`，然后重启 `fuyubot run`。
+**安装**：商店里搜索 `musiccard` 安装；或 `fuyubot plugin install ./musiccard`（指向插件目录或解压后的包）；或把 zip 直接解压到 `plugins/fengyegf.musiccard/`，确认根上是 `plugin.json` 与 `bin/`，然后重启 `fuyubot run`。
 
 **最小配置**（`fuyubot.toml`）：
 
 ```toml
-[plugin.musiccard]
+[plugin.fengyegf.musiccard]
 request_timeout_ms = 15000
 
 [config]
@@ -95,8 +95,8 @@ python scripts/package.py --plugin musiccard --platform windows-x86_64
 **发布**：
 
 ```bash
-git tag musiccard-v0.1.5
-git push origin musiccard-v0.1.5
+git tag fengyegf.musiccard-v0.1.5
+git push origin fengyegf.musiccard-v0.1.5
 ```
 
 ## 项目依赖（软/硬）

@@ -52,19 +52,21 @@ plugins/<id>/
 
 | 插件 id | 名称 | 版本 | 平台 | 依赖 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| [`whois`](crates/fuyubot-plugin-whois/README.md) | Whois | 0.1.5 | 全平台 | html2img（硬） | 查询域名注册信息与 IP 归属，渲染成信息卡片 |
-| [`musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.5 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
-| [`epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.5 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
-| [`kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.6 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
-| [`system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.5 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
-| [`trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.1 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
-| [`ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
-| [`bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.1 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
-| [`rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.1 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
+| [`fengyegf.whois`](crates/fuyubot-plugin-whois/README.md) | Whois | 0.1.5 | 全平台 | html2img（硬） | 查询域名注册信息与 IP 归属，渲染成信息卡片 |
+| [`fengyegf.musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.5 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
+| [`fengyegf.epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.5 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
+| [`fengyegf.kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.6 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
+| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.5 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
+| [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.1 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
+| [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
+| [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.1 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
+| [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.1 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
 
 平台口径：全平台 = `windows-x86_64` / `linux-x86_64` / `macos-aarch64` / `android-aarch64` /
 `android-x86_64`；桌面三平台 = 不含 Android。唯一来源是各 crate 的 `plugin.json`。
 html2img 指宿主上的 `fuyubot.html2img` 插件（服务名同名），卡片类插件没有它不会出图。
+插件 id 采用 **作者.插件名** 命名：作者是仓库 owner `fengyegf`，所以 id 形如 `fengyegf.whois`，
+安装目录是 `plugins/<id>/`，配置段是 `[plugin.<id>]`（即 `[plugin.fengyegf.whois]`）。
 
 ## 使用说明
 
@@ -75,7 +77,7 @@ html2img 指宿主上的 `fuyubot.html2img` 插件（服务名同名），卡片
 本地目录 / 包安装：
 
 ```bash
-fuyubot plugin install ./whois            # 目录
+fuyubot plugin install ./fengyegf.whois    # 目录（目录名 = 插件 id）
 fuyubot plugin uninstall whois            # 卸载（配置与 data/ 保留）
 ```
 
@@ -104,8 +106,8 @@ python scripts/package.py --plugin whois --platform windows-x86_64
 一个插件一个 tag，推 tag 触发 `.github/workflows/release.yml` 构建全部声明平台并挂到 Release：
 
 ```bash
-git tag whois-v0.1.4
-git push origin whois-v0.1.4
+git tag fengyegf.whois-v0.1.5
+git push origin fengyegf.whois-v0.1.6
 ```
 
 ### 构建证明与 Release 不可变性
@@ -114,7 +116,7 @@ git push origin whois-v0.1.4
 确实是本仓库 CI 构建的：
 
 ```bash
-gh attestation verify dist/whois-0.1.5-windows-x86_64.zip --repo fengyegf/fy-plugins
+gh attestation verify dist/fengyegf.whois-0.1.5-windows-x86_64.zip --repo fengyegf/fy-plugins
 ```
 
 仓库已开启 **Release 不可变性**（Settings → Releases → Release immutability）：已发布

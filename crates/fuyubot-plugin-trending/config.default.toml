@@ -1,4 +1,4 @@
-# fuyubot-plugin-trending 默认配置：最低优先级，宿主会与 [plugin.trending] 段合并
+# fuyubot-plugin-trending 默认配置：最低优先级，宿主会与 [plugin.fengyegf.trending] 段合并
 trending_url = "https://github.com/trending"
 width = 1600
 timeout_ms = 15000

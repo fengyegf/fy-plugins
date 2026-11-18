@@ -1,7 +1,7 @@
-//! 插件配置：全部来自宿主 `[plugin.musiccard]` 段与顶层 `[config]`。
+//! 插件配置：全部来自宿主 `[plugin.fengyegf.musiccard]` 段与顶层 `[config]`。
 //!
 //! ```toml
-//! [plugin.musiccard]
+//! [plugin.fengyegf.musiccard]
 //! request_timeout_ms = 15000              # 普通接口超时（秒级精度，缺省 15s）
 //!
 //! [config]
@@ -18,8 +18,8 @@ use std::time::Duration;
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::{Map, Value};
 
-/// 插件段名：`[plugin.musiccard]`。
-pub const PLUGIN_NAME: &str = "musiccard";
+/// 插件段名：`[plugin.fengyegf.musiccard]`。
+pub const PLUGIN_NAME: &str = "fengyegf.musiccard";
 
 /// 默认命令前缀。
 const DEFAULT_PREFIXES: [&str; 5] = ["/", "!", "！", ".", "#"];
@@ -50,7 +50,7 @@ impl Config {
     pub fn load(host: &HostApi) -> Self {
         let mut config = Self::default();
 
-        // `[plugin.musiccard]` 整段：键名同时接受 snake_case 与大写写法。
+        // `[plugin.fengyegf.musiccard]` 整段：键名同时接受 snake_case 与大写写法。
         let section = host
             .config_value(PLUGIN_NAME, "")
             .and_then(|value| value.as_object().cloned())

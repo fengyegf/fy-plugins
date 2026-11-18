@@ -144,8 +144,17 @@ def load_plugin(plugin: str) -> tuple[Path, dict, str, str]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema") != 1:
         raise SystemExit("plugin.json 的 schema 必须是 1")
-    if manifest.get("id") != plugin:
-        raise SystemExit(f"plugin.json 的 id 与 --plugin 不一致：{manifest.get('id')!r}")
+    # 商店要求 id 是「作者.插件名」（如 fengyegf.whois）；--plugin 仍用 crate 的短名。
+    manifest_id = manifest.get("id")
+    if not isinstance(manifest_id, str) or not (
+        manifest_id == plugin
+        or manifest_id.endswith("." + plugin)
+        or manifest_id.endswith("-" + plugin)
+    ):
+        raise SystemExit(
+            f"plugin.json 的 id {manifest_id!r} 与 --plugin {plugin!r} 不匹配"
+            "（id 应为 <作者>.<插件名>）"
+        )
     # 当前宿主支持 ABI v5（旧）/ v6（新），bundle 按插件自己声明的版本打。
     if manifest.get("kind") != "native" or manifest.get("abi") not in (5, 6):
         raise SystemExit("plugin.json 必须声明 native kind 和 ABI 5 或 6")
@@ -337,7 +346,8 @@ def main() -> int:
         ),
     )
 
-    archive_path = output_dir / f"{args.plugin}-{version}-{args.platform}.zip"
+    # 资产名用完整 id（<作者>.<插件名>），与商店条目的资产名一致。
+    archive_path = output_dir / f"{manifest['id']}-{version}-{args.platform}.zip"
     with zipfile.ZipFile(archive_path, "w") as archive:
         add_file(archive, plugin_json, "plugin.json")
         add_file(archive, bundle_dir / entry, entry)

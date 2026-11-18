@@ -1,10 +1,10 @@
 //! 运行期配置。
 //!
-//! 全部来自宿主的 `[plugin.kfc]` 段（`fuyubot.toml`），键名同时接受 snake_case
+//! 全部来自宿主的 `[plugin.fengyegf.kfc]` 段（`fuyubot.toml`），键名同时接受 snake_case
 //! 与 TS 版风格的大写写法；缺省值与 TS 版写死的常量一致。
 //!
 //! ```toml
-//! [plugin.kfc]
+//! [plugin.fengyegf.kfc]
 //! api_url   = "https://kfc-crazy-thursday.vercel.app/api/index" # 文案来源
 //! width     = 800        # 卡片宽度（px），夹到 460–1600
 //! timeout_ms = 15000     # 拉文案的超时
@@ -12,7 +12,7 @@
 //! ```
 //!
 //! 读取顺序：`start()` 传进来的配置 JSON（宿主可能已经把本插件段序列化好了）→
-//! `get_config("kfc", "")` 再读一次兜底；两者缺什么就各自退回缺省值。
+//! `get_config("fengyegf.kfc", "")` 再读一次兜底；两者缺什么就各自退回缺省值。
 //!
 //! 命令前缀的第三层兜底是宿主顶层 `[config].PREFIXES`：那是 TS 宿主的写法，
 //! Rust 宿主没有这个键，读到 `None` 就继续用缺省值——所以别在这里假设它一定存在。
@@ -22,8 +22,8 @@ use std::time::Duration;
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::Value;
 
-/// 插件段名：`[plugin.kfc]`。
-pub const PLUGIN_NAME: &str = "kfc";
+/// 插件段名：`[plugin.fengyegf.kfc]`。
+pub const PLUGIN_NAME: &str = "fengyegf.kfc";
 
 /// 文案接口。TS 版里写死在 `index.ts`。
 pub const DEFAULT_API_URL: &str = "https://kfc-crazy-thursday.vercel.app/api/index";

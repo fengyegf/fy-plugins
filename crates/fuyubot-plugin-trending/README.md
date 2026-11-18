@@ -1,6 +1,6 @@
 # GitHub Trending
 
-插件 id：`trending` ｜ 版本：0.1.1 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id：`fengyegf.trending` ｜ 版本：0.1.1 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -34,7 +34,7 @@ crates/fuyubot-plugin-trending/
 部署后的 bundle（zip 根就是插件目录内容）：
 
 ```text
-plugins/trending/
+plugins/fengyegf.trending/
 ├─ plugin.json
 ├─ config.default.toml
 └─ bin/trending.dll            # Linux: libtrending.so；macOS: libtrending.dylib
@@ -46,11 +46,11 @@ plugins/trending/
 | --- | --- | --- |
 | `/trending [周期]` | 无权限判断（登记 `role=user`），私聊 / 群聊 | 抓指定周期榜单，出 4 列卡片墙并以照片回复 |
 
-`/trending@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀；参数不认识时回用法提示，不猜用户意图。命令前缀来自 `[plugin.trending].prefixes`，未配置时跟随宿主 `[config].PREFIXES`。
+`/trending@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀；参数不认识时回用法提示，不猜用户意图。命令前缀来自 `[plugin.fengyegf.trending].prefixes`，未配置时跟随宿主 `[config].PREFIXES`。
 
 ## 配置一览
 
-配置段：`[plugin.trending]`，字段全部可选。
+配置段：`[plugin.fengyegf.trending]`，字段全部可选。
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -68,12 +68,12 @@ plugins/trending/
 
 - 插件商店直接安装；或
 - 源码目录：`fuyubot plugin install ./trending`；或
-- 手动解压 zip 到宿主的 `plugins/trending/` 后重启宿主。
+- 手动解压 zip 到宿主的 `plugins/fengyegf.trending/` 后重启宿主。
 
 **最小配置**（`fuyubot.toml`）：
 
 ```toml
-[plugin.trending]
+[plugin.fengyegf.trending]
 width = 1600
 max_items = 15
 avatar = true
@@ -104,13 +104,13 @@ cargo build --release -p fuyubot-plugin-trending
 python scripts/package.py --plugin trending --platform windows-x86_64
 ```
 
-产出 `target/release/trending.dll` 与 `trending-0.1.1-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/trending.dll`）。
+产出 `target/release/trending.dll` 与 `fengyegf.trending-0.1.1-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/trending.dll`）。
 
 **发布**
 
 ```bash
-git tag trending-v0.1.1
-git push origin trending-v0.1.1
+git tag fengyegf.trending-v0.1.1
+git push origin fengyegf.trending-v0.1.1
 ```
 
 tag 名固定为 `<id>-v<version>`；同一版本已打过 tag 时，先递增 `plugin.json` 的版本号再打新 tag。
