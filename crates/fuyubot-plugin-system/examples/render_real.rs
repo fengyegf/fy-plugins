@@ -5,7 +5,7 @@
 //! ```
 //!
 //! 输出 `target/qa/json/card-real.json`（请求）与 `target/qa/data/card-real.json`
-//! （data，可喂给 `target/vuecheck`）。背景 URL 来自 `[plugin.system] background_url`
+//! （data，可喂给 `target/vuecheck`）。背景 URL 来自 `[plugin.fengyegf.system] background_url`
 //! 的缺省值（TS 版 `system.vue` 里的 B 站图）；html2img 拉不到时会自动只留渐变，
 //! 那正是插件在弱网下的真实行为。
 

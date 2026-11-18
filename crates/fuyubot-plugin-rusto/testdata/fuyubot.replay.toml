@@ -13,7 +13,7 @@ account_type = "bot"
 api_id = 1
 data_dir = "data"
 
-[plugin.rusto]
+[plugin.fengyegf.rusto]
 auto = false
 max_side = 1600
 concurrency = 1
