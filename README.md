@@ -21,6 +21,7 @@
 | `system` | `crates/fuyubot-plugin-system` | 0.1.4 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `system.dll` |
 | `trending` | `crates/fuyubot-plugin-trending` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `trending.dll` |
 | `bidibot` | `crates/fuyubot-plugin-bidibot` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `bidibot.dll` |
+| `rusto` | `crates/fuyubot-plugin-rusto` | 0.1.0 | Windows / Linux / macOS / Android arm64 / Android x86_64 | `rusto.dll` |
 
 平台列表的唯一来源是各 crate 的 `plugin.json`；发布流水线按它生成构建矩阵。
 
