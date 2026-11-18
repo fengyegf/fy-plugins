@@ -1,0 +1,29 @@
+# rusto：RustO! 纯 Rust OCR 的 FuyuBot 插件封装。
+#
+# 一个 crate 两种库目标：cdylib 给宿主 dlopen，rlib 让 cargo test / examples 直接调内部模块。
+[package]
+name = "fuyubot-plugin-rusto"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "RustO! 纯 Rust OCR：图片进、文本出，并作为 rusto.ocr 服务供其它插件联动"
+
+# 注意：本 crate 的 lib 名与依赖 rusto-rs 的 lib 名都叫 rusto（宿主 dlopen 的
+# 文件名跟着这里走，所以不能改）。rustdoc 的 doctest 会在两个同名 rlib 之间
+# 歧义报 E0464，本插件也没有 doctest，直接关掉。
+[lib]
+name = "rusto"
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+fuyubot-plugin-api.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# 入参 data（base64/DataURL）解码、图片尺寸探测与限幅缩放。
+image = { workspace = true, features = ["png", "jpeg", "gif", "webp"] }
+base64 = "0.22"
+# 引擎：纯 Rust MNN 运行时（rusto-nn）+ RapidOCR 前后处理。
+# default-features = false：不要 rten/webgpu/cuda/opencv 这些可选后端；
+# parallel 打开 rusto-nn 的并行 kernel。
+rusto-rs = { version = "=0.4.1", default-features = false, features = ["parallel"] }

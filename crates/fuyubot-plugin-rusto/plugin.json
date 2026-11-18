@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "rusto",
+  "name": "RustO OCR",
+  "version": "0.1.0",
+  "kind": "native",
+  "entry": "rusto.dll",
+  "abi": 6,
+  "platforms": [
+    "windows-x86_64",
+    "linux-x86_64",
+    "macos-aarch64",
+    "android-aarch64",
+    "android-x86_64"
+  ],
+  "description": "纯 Rust OCR（RustO!/PP-OCRv6）：发图 /ocr 出文本，并以 rusto.ocr 服务供其它插件调用。"
+}

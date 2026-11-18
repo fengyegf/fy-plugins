@@ -1,0 +1,117 @@
+[
+{
+  "@type": "updateNewMessage",
+  "message": {
+    "@type": "message",
+    "id": 201,
+    "chat_id": 7770001,
+    "is_outgoing": false,
+    "date": 0,
+    "sender_id": {
+      "@type": "messageSenderUser",
+      "user_id": 42
+    },
+    "content": {
+      "@type": "messagePhoto",
+      "caption": {
+        "@type": "formattedText",
+        "text": "/ocr",
+        "entities": []
+      },
+      "photo": {
+        "@type": "photo",
+        "sizes": [
+          {
+            "type": "s",
+            "width": 320,
+            "height": 180,
+            "photo": {
+              "id": 1,
+              "size": 9000
+            }
+          },
+          {
+            "type": "x",
+            "width": 1280,
+            "height": 720,
+            "photo": {
+              "id": 55,
+              "size": 120000
+            }
+          }
+        ]
+      }
+    }
+  }
+},
+{
+  "@type": "updateNewMessage",
+  "message": {
+    "@type": "message",
+    "id": 202,
+    "chat_id": 7770001,
+    "is_outgoing": false,
+    "date": 0,
+    "sender_id": {
+      "@type": "messageSenderUser",
+      "user_id": 42
+    },
+    "reply_to": {
+      "@type": "messageReplyToMessage",
+      "message_id": 201
+    },
+    "content": {
+      "@type": "messageText",
+      "text": {
+        "@type": "formattedText",
+        "text": "/ocr",
+        "entities": []
+      }
+    }
+  }
+},
+{
+  "@type": "updateNewMessage",
+  "message": {
+    "@type": "message",
+    "id": 203,
+    "chat_id": 7770001,
+    "is_outgoing": false,
+    "date": 0,
+    "sender_id": {
+      "@type": "messageSenderUser",
+      "user_id": 42
+    },
+    "content": {
+      "@type": "messageText",
+      "text": {
+        "@type": "formattedText",
+        "text": "/ocr status",
+        "entities": []
+      }
+    }
+  }
+},
+{
+  "@type": "updateNewMessage",
+  "message": {
+    "@type": "message",
+    "id": 204,
+    "chat_id": 7770001,
+    "is_outgoing": false,
+    "date": 0,
+    "sender_id": {
+      "@type": "messageSenderUser",
+      "user_id": 42
+    },
+    "content": {
+      "@type": "messageText",
+      "text": {
+        "@type": "formattedText",
+        "text": "/ocr help",
+        "entities": []
+      }
+    }
+  }
+}
+]
