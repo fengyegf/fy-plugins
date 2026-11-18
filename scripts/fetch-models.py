@@ -121,7 +121,7 @@ def main() -> int:
     parser.add_argument(
         "--preset",
         default=DEFAULT_PRESET,
-        help=f"模型预设目录名，默认 {DEFAULT_PRESET}（目录名就是 [plugin.rusto] 的 model）",
+        help=f"模型预设目录名，默认 {DEFAULT_PRESET}（目录名就是 [plugin.fengyegf.rusto] 的 model）",
     )
     parser.add_argument(
         "--dest",
@@ -213,9 +213,9 @@ def main() -> int:
         "--assets models --assets NOTICE.md"
     )
     if preset == DEFAULT_PRESET:
-        print(f"  [plugin.rusto] model 默认就是 \"{preset}\"，只需把 model_dir 指到 {dest_root}")
+        print(f"  [plugin.fengyegf.rusto] model 默认就是 \"{preset}\"，只需把 model_dir 指到 {dest_root}")
     else:
-        print(f"  [plugin.rusto] model = \"{preset}\"（目录名就是预设名）")
+        print(f"  [plugin.fengyegf.rusto] model = \"{preset}\"（目录名就是预设名）")
     return 0
 
 
