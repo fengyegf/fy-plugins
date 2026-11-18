@@ -1,6 +1,6 @@
 # Bidibot 双向私聊中转
 
-`bidibot` · v0.1.0 · ABI v6 · Windows / Linux / macOS / Android
+`bidibot` · v0.1.1 · ABI v6 · Windows / Linux / macOS / Android
 
 ## 项目介绍
 
@@ -124,7 +124,7 @@ cargo build --release -p fuyubot-plugin-bidibot
 python scripts/package.py --plugin bidibot --platform windows-x86_64
 ```
 
-**发布**：`git tag bidibot-v0.1.0 && git push origin bidibot-v0.1.0`。
+**发布**：`git tag bidibot-v0.1.1 && git push origin bidibot-v0.1.1`。
 
 ## 项目依赖（软/硬）
 

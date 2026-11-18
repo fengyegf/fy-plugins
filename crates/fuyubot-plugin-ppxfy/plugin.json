@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "ppxfy",
   "name": "PPXFY",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "kind": "native",
   "entry": "bin/ppxfy.dll",
   "abi": 6,

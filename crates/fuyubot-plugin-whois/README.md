@@ -1,6 +1,6 @@
 # Whois
 
-插件 id `whois` · 版本 `0.1.4` · Native ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id `whois` · 版本 `0.1.5` · Native ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -99,7 +99,7 @@ python scripts/package.py --plugin whois --platform windows-x86_64
 **发布**：打 `<id>-v<version>` 形式的 tag 并推送，CI 构建 `plugin.json` 声明的平台。
 
 ```bash
-git tag whois-v0.1.4 && git push origin whois-v0.1.4
+git tag whois-v0.1.5 && git push origin whois-v0.1.5
 ```
 
 ## 项目依赖（软/硬）

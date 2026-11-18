@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "whois",
   "name": "Whois",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "kind": "native",
   "entry": "bin/whois.dll",
   "abi": 6,

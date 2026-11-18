@@ -1,6 +1,6 @@
 # GitHub Trending
 
-插件 id：`trending` ｜ 版本：0.1.0 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id：`trending` ｜ 版本：0.1.1 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -104,13 +104,13 @@ cargo build --release -p fuyubot-plugin-trending
 python scripts/package.py --plugin trending --platform windows-x86_64
 ```
 
-产出 `target/release/trending.dll` 与 `trending-0.1.0-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/trending.dll`）。
+产出 `target/release/trending.dll` 与 `trending-0.1.1-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/trending.dll`）。
 
 **发布**
 
 ```bash
-git tag trending-v0.1.0
-git push origin trending-v0.1.0
+git tag trending-v0.1.1
+git push origin trending-v0.1.1
 ```
 
 tag 名固定为 `<id>-v<version>`；同一版本已打过 tag 时，先递增 `plugin.json` 的版本号再打新 tag。

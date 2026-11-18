@@ -1,6 +1,6 @@
 # RustO OCR
 
-rusto · v0.1.0 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+rusto · v0.1.1 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -104,13 +104,13 @@ cargo build --release -p fuyubot-plugin-rusto
 python scripts/package.py --plugin rusto --platform windows-x86_64
 ```
 
-`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/rusto-0.1.0-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
+`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/rusto-0.1.1-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
 
 **发布**：
 
 ```bash
-git tag rusto-v0.1.0
-git push origin rusto-v0.1.0
+git tag rusto-v0.1.1
+git push origin rusto-v0.1.1
 ```
 
 ## 项目依赖（软/硬）

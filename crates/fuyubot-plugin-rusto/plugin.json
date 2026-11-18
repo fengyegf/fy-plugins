@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "rusto",
   "name": "RustO OCR",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "kind": "native",
   "entry": "bin/rusto.dll",
   "abi": 6,

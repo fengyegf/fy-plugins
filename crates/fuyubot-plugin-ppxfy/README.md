@@ -1,6 +1,6 @@
 # PPXFY（DMM / DLSite 下载与分享）
 
-`ppxfy` · v0.1.5 · ABI v6 · Windows x86_64 / Linux x86_64 / macOS aarch64
+`ppxfy` · v0.1.6 · ABI v6 · Windows x86_64 / Linux x86_64 / macOS aarch64
 
 ## 项目介绍
 
@@ -103,7 +103,7 @@ cargo build --release -p fuyubot-plugin-ppxfy
 python scripts/package.py --plugin ppxfy --platform windows-x86_64
 ```
 
-**发布**：`git tag ppxfy-v0.1.5 && git push origin ppxfy-v0.1.5`。
+**发布**：`git tag ppxfy-v0.1.6 && git push origin ppxfy-v0.1.6`。
 
 ## 项目依赖（软/硬）
 

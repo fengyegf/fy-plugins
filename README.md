@@ -52,15 +52,15 @@ plugins/<id>/
 
 | 插件 id | 名称 | 版本 | 平台 | 依赖 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| [`whois`](crates/fuyubot-plugin-whois/README.md) | Whois | 0.1.4 | 全平台 | html2img（硬） | 查询域名注册信息与 IP 归属，渲染成信息卡片 |
-| [`musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.4 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
-| [`epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.4 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
-| [`kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.5 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
-| [`system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.4 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
-| [`trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.0 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
-| [`ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.5 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
-| [`bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.0 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
-| [`rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.0 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
+| [`whois`](crates/fuyubot-plugin-whois/README.md) | Whois | 0.1.5 | 全平台 | html2img（硬） | 查询域名注册信息与 IP 归属，渲染成信息卡片 |
+| [`musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.5 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
+| [`epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.5 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
+| [`kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.6 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
+| [`system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.5 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
+| [`trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.1 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
+| [`ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
+| [`bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.1 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
+| [`rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.1 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
 
 平台口径：全平台 = `windows-x86_64` / `linux-x86_64` / `macos-aarch64` / `android-aarch64` /
 `android-x86_64`；桌面三平台 = 不含 Android。唯一来源是各 crate 的 `plugin.json`。
@@ -107,6 +107,19 @@ python scripts/package.py --plugin whois --platform windows-x86_64
 git tag whois-v0.1.4
 git push origin whois-v0.1.4
 ```
+
+### 构建证明与 Release 不可变性
+
+发布资产会同时生成**构建来源证明**（`actions/attest-build-provenance`），可校验某个 zip
+确实是本仓库 CI 构建的：
+
+```bash
+gh attestation verify dist/whois-0.1.5-windows-x86_64.zip --repo fengyegf/fy-plugins
+```
+
+仓库已开启 **Release 不可变性**（Settings → Releases → Release immutability）：已发布
+Release 的资产与标签不能再修改/替换，GitHub 还会自动生成 release attestation，插件商店才能
+信任下载到的资产。发布流程已改成「先建 draft → 传完全部资产 → 再发布」，避免发布后补资产。
 
 ### 依赖
 
