@@ -60,6 +60,13 @@
 > 口径见 [`docs/bidibot-topics-design.md`](docs/bidibot-topics-design.md)，配置与命令见
 > [`crates/fuyubot-plugin-bidibot/README.md`](crates/fuyubot-plugin-bidibot/README.md)。
 
+> `rusto` v0.1.0（纯 Rust OCR，图片进文本出）同样只做过本机验证：`cargo build --release` +
+> `cargo test`（40 项，含图片消息回放夹具）+ `cargo clippy -D warnings` +
+> `scripts/check_abi.py`（ABI 符号 7/7）+ `scripts/package.py --platform windows-x86_64`
+> （离线包 4.2 MiB，crate 根的 `models/` 与 `NOTICE.md` 由打包脚本自动带入）。
+> 未进多平台矩阵，也没在真机上跑过完整收发；模型获取与在线 / 离线两种包见
+> [`crates/fuyubot-plugin-rusto/BUNDLE.md`](crates/fuyubot-plugin-rusto/BUNDLE.md)。
+
 验证记录：<https://github.com/fengyegf/fy-plugins/actions/runs/42824916393>。
 上面的验证是 ABI v5 时期跑的；迁到 ABI v6 后，只有构建/打包结论仍然成立，宿主加载
 需要新版（ABI v6）的 `fuyubot-sdk` / FuyuBot 才能验证——本机附带的
@@ -90,8 +97,9 @@ Android 的两端仍按发布流水线（tag）构建。
 
 插件命令都是**普通文本消息**：前缀可配（缺省 `/` `!` `！` `.` `#`），命令名大小写不敏感，
 `/whois@FuyuBot` 里的 `@FuyuBot` 会被剥掉。每个插件启动时把自己登记进宿主的命令表
-（`fuyubot.host.commands`），所以下表就是 `/help` 里看到的内容：这些命令都没有权限判断，
-一律登记 `role = user`、`scopes = private + group`（频道不登记，频道里没有「回命令」的会话上下文）。
+（`fuyubot.host.commands`），所以下表就是 `/help` 里看到的内容。除 `bidibot` 的群管理命令
+登记为 `role = owner`、`scopes = group` 外，其余命令都不做权限判断，一律 `role = user`、
+`scopes = private + group`（频道不登记，频道里没有「回命令」的会话上下文）。
 
 | 插件 | 命令 | 别名 | 参数 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -105,6 +113,18 @@ Android 的两端仍按发布流水线（tag）构建。
 | `ppxfy` | `/clearcache` | — | — | 兜底清理 `cache/`（没有活跃任务时也能用） |
 | `system` | `/system` | — | — | 宿主机系统信息与机器人状态卡片 |
 | `trending` | `/trending` | — | `[today\|weekly\|monthly]`，中文（今日 / 本周 / 本月）也认，缺省今日 | GitHub Trending 4 列卡片墙 |
+| `bidibot` | `/bidistart` | — | — | 欢迎语：双向私聊中转怎么用 |
+| `bidibot` | `/bidihelp` | — | — | 帮助（私聊里也能用） |
+| `bidibot` | `/bidistatus` | — | — | 主人：运行状态（群 / 管理员 / 广告 / 话题数） |
+| `bidibot` | `/bidilist` | — | — | 主人：拉黑列表（前 20 条） |
+| `bidibot` | `/bidiban` | — | `[id] [原因]` | 主人：拉黑；在该用户的话题里发可省略 id |
+| `bidibot` | `/bidiunban` | — | `[id]` | 主人：解封；在话题里发可省略 id |
+| `bidibot` | `/bidiwarn` | — | `[id]` | 主人：查看某用户的广告警告数 |
+| `bidibot` | `/bidiclear` | — | `[id]` | 主人：清零某用户的广告警告 |
+| `bidibot` | `/bidiword` | — | `add\|del\|list [词]` | 主人：维护广告关键词 |
+| `bidibot` | `/bidisay` | — | `[id] <文字>` | 主人：以 bot 身份主动给用户发一条 |
+| `bidibot` | `/bidicard` | — | — | 主人：在当前话题里重发这个用户的名片 |
+| `rusto` | `/ocr` | `/rusto` | `[detail\|status\|warm\|path <本机路径>\|help]` | 识别图片文字；对图片消息回复或在图片说明里写命令。`detail` 附行级置信度与坐标（也认 `d` / `详细`），`status` / `warm` 看引擎 / 预加载，`path` 识别本机图片，`help` 用法 |
 
 几点补充：
 
@@ -113,6 +133,10 @@ Android 的两端仍按发布流水线（tag）构建。
 - `ppxfy` 的交互步骤（链接、密码、编号、包名）都是**回复提示消息**，等待上限是
   `listen_timeout_ms`（缺省 10 分钟），`/cancel` 随时可打断；
 - 参数不认识时（例如 `/trending foo`）只回一条用法提示，不替用户猜。
+- `bidibot` 的私聊中转不靠命令：用户直接发消息就进对应话题，主人在话题里说话 / 引用回复即回到用户；
+  `/bidi*` 只是群里的管理入口（转发本身对用户透明）。
+- `rusto` 的 `/ocr` 必须带上图片（回复图片或写在图片说明里），私聊直发图要 `auto = true` 才自动识别；
+  不带图只回用法提示，不会替你猜。
 
 ## 配置一览
 
@@ -129,12 +153,15 @@ README（下表「插件」一列），本文只列「有哪些键」。
 | [ppxfy](crates/fuyubot-plugin-ppxfy/README.md) | `[plugin.ppxfy]` | `cache_dir` `listen_timeout_ms` `unzip_timeout_ms` `archive_size_threshold_mb` `download_concurrency` `split_threshold_mb` `seven_zip` `fix_encoding` `telegraph_token` `telegraph_author` `telegraph_author_url` `dlsite_proxy` `mongo_collection` `mongodb_db` |
 | [system](crates/fuyubot-plugin-system/README.md) | `[plugin.system]` | `super_admin` `background_url` `timeout_ms` `avatar_timeout_ms` `prefixes` |
 | [trending](crates/fuyubot-plugin-trending/README.md) | `[plugin.trending]` | `trending_url` `width` `timeout_ms` `max_items` `avatar` `avatar_timeout_ms` `prefixes` |
+| [bidibot](crates/fuyubot-plugin-bidibot/README.md) | `[plugin.bidibot]` | `group_id` `owner_id` `topic_name_max` `topic_icon_color` `topic_card` `card_image` `card_width` `ai_base_url` `ai_api_key` `ai_model` `ai_timeout_ms` `ai_temperature` `ad_mode` `auto_ban_after` `warn_cooldown_secs` `ad_keywords` `ad_keywords_extra` `max_relay_chars` `send_timeout_ms` `rate_limit_per_min` `notify_blocked_every_secs` `store_path` `skills_dir` `command_table` `prefixes` |
+| [rusto](crates/fuyubot-plugin-rusto/README.md) | `[plugin.rusto]` | `auto` `max_side` `concurrency` `rec_workers` `model` `model_dir` `mirror` `detail_default` `reply_placeholder` `chunk_size` `timeout_ms` |
 
 两点约定：
 
 - 命令前缀有两种取法，缺省都是 `["/", "!", "！", ".", "#"]`：`whois` / `kfc` / `system` /
-  `trending` 先读本插件段的 `prefixes`，没写再跟随宿主顶层 `[config].PREFIXES`；
-  `musiccard` / `epic` / `ppxfy` 只跟随宿主顶层 `[config].PREFIXES`，本段没有这个键。
+  `trending` / `bidibot` 先读本插件段的 `prefixes`，没写再跟随宿主顶层 `[config].PREFIXES`；
+  `musiccard` / `epic` / `ppxfy` 只跟随宿主顶层 `[config].PREFIXES`，本段没有这个键；
+  `rusto` 的五个前缀写死在解析层，本段也没有这个键。
 - `ppxfy` 的两个凭据（`telegraph_token` / `dlsite_proxy`）按「配置段 > 环境变量
   `PPXFY_TELEGRAPH_TOKEN` / `PPXFY_DLSITE_PROXY` > `.env`」取值，代码里不留缺省值；
   galgame 记录入库走 mongo-plugin 的 `storage.mongo`，没装时分享照常、只是不入库。
