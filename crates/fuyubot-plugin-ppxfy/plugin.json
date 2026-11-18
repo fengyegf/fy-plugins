@@ -4,12 +4,17 @@
   "name": "PPXFY",
   "version": "0.1.5",
   "kind": "native",
-  "entry": "ppxfy.dll",
+  "entry": "bin/ppxfy.dll",
   "abi": 6,
   "platforms": [
     "windows-x86_64",
     "linux-x86_64",
     "macos-aarch64"
   ],
-  "description": "从 DMM / DLSite 下载并解压作品，附带记录与 Telegraph 上传。"
+  "optional_depends": [
+    "storage.mongo"
+  ],
+  "description": "从 DMM / DLSite 下载并解压作品，附带记录与 Telegraph 上传。",
+  "homepage": "https://github.com/fengyegf/fy-plugins/tree/main/crates/fuyubot-plugin-ppxfy",
+  "config": "config.default.toml"
 }

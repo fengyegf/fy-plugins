@@ -4,7 +4,7 @@
   "name": "Epic",
   "version": "0.1.4",
   "kind": "native",
-  "entry": "epic.dll",
+  "entry": "bin/epic.dll",
   "abi": 6,
   "platforms": [
     "windows-x86_64",
@@ -13,5 +13,10 @@
     "android-aarch64",
     "android-x86_64"
   ],
-  "description": "生成 Epic 免费游戏卡片并以照片回复消息。"
+  "depends": [
+    "fuyubot.html2img"
+  ],
+  "description": "生成 Epic 免费游戏卡片并以照片回复消息。",
+  "homepage": "https://github.com/fengyegf/fy-plugins/tree/main/crates/fuyubot-plugin-epic",
+  "config": "config.default.toml"
 }

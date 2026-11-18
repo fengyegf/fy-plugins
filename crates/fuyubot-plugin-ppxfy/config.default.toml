@@ -1,0 +1,14 @@
+# ppxfy 默认配置（最低优先级，[plugin.ppxfy] 中同名键会覆盖）
+cache_dir = "cache"
+listen_timeout_ms = 600000
+unzip_timeout_ms = 1800000
+archive_size_threshold_mb = 1843.2
+download_concurrency = 4
+split_threshold_mb = 1900
+seven_zip = "7z"
+fix_encoding = true
+telegraph_token = ""
+telegraph_author = "@ppxfy - Galgame"
+telegraph_author_url = "https://t.me/ppxfy"
+mongo_collection = "ppxfy_galgame"
+# dlsite_proxy、mongodb_db 默认不写：直连 / 使用 mongo-plugin 配置的库

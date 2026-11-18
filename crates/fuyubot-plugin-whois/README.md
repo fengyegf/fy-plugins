@@ -1,245 +1,112 @@
-# Whois 插件
+# Whois
 
-基于 FuyuBot SDK Native ABI v6 的域名 Whois 查询插件。用户发送命令后，插件查询
-域名注册信息与服务器 IP 归属，把数据交给 `assets/card.html` 里的 Vue 卡片模板，
-再由宿主上的 `fuyubot.html2img` 服务渲染成 JPEG 卡片，并以照片回复触发消息。
+插件 id `whois` · 版本 `0.1.4` · Native ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
-整个运行链路使用 Rust 实现，不依赖 Node、浏览器或外部截图服务；渲染器只在宿主
-一侧（html2img 插件）存在，本插件不再链接渲染引擎。
+## 项目介绍
 
-## 功能
+查询域名 Whois 注册信息与服务器 IP 归属，渲染成信息卡片，以照片回复命令消息。
 
-- 支持裸域名、完整 URL、端口、路径和中文域名。
-- 展示域名状态、注册人与注册商、注册和到期时间、DNS 服务器、服务器 IP 归属与运营商。
-- 卡片左上角优先显示网站自己的图标（`/favicon.ico` 或首页声明的图标），取不到时回退到内置图标。
-- 根据注册和到期状态展示对应徽标。
-- 未注册域名直接回复文本，不生成空卡片。
-- Whois 接口返回明确错误时，将原因回复给用户。
-- IP 归属查询失败时保留主体卡片，并使用已有数据或占位值兜底。
-- 查询、渲染和发送均在独立业务线程中执行（`html2img` 调用是阻塞的），不阻塞
-  TDLib 回调线程。
-- `html2img` 产出的临时图片发送完成后立即删除。
+- 输入宽容：裸域名、完整 URL、带端口 / 路径、中文域名（`例子.中国`）都能解析。
+- 卡片内容：域名状态、注册人与注册商、注册 / 到期时间、DNS 服务器、服务器 IP 归属与运营商，左上角优先显示网站自己的图标。
+- 工作链路：`/whois <域名>` → 清洗域名 → 请求 Whois 接口 → 查询 IP 归属 → 抓网站图标 → 把卡片数据交给宿主 `fuyubot.html2img` 服务出图（JPEG）→ 以照片回复 → 删除临时图。
+- 界面在 `assets/card.html`（Vue 模板 + 内联样式），Rust 只做数据映射，不链接渲染引擎。
+- 降级明确：未注册域名回文本；接口报错把原因转给用户；IP 归属与图标失败只少一组数据，不影响出图。
 
-## 命令表与 `/help`
+![预览](preview.png)
 
-命令表的主人是**宿主**：宿主把命令表暴露成进程级共享服务 `fuyubot.host.commands`，
-插件在 `start()` 里用它的 `register` 方法登记 `/whois`。内置 `/help` 只是这张表的
-读取方（`fuyubot.host.commands.list` 之后按 `role` / `scopes` / `hidden` 过滤、
-按插件分组渲染）。宿主服务启动时就在，因此**不需要** `soft_inject` 排队。
+## 目录结构
 
-登记入参：
-
-```json
-{"name":"whois","description":"查询域名注册信息与服务器 IP 归属，渲染成信息卡片","role":"user","scopes":["private","group"],"hidden":false}
-```
-
-`/whois` 没有权限判断、私聊与群聊都能用，就按这个实际范围登记；登记只是自描述，
-执行权限仍由插件自己的命令匹配决定。成功回 `{"ok":true,"name":…,"plugin":…}`
-（`plugin` 由宿主按调用者栈判定），失败回 `{"error":…}`；登记失败只记一条 warn，
-不影响 `/whois` 本身。
-
-## 回复方式
-
-回复命令消息走宿主的 `fuyubot.host.command` 服务的 `reply` 方法，入参是
-`{"chat_id":…,"message_id":…,"timeout_ms":…,"payload":{"input_message_content":…}}`，
-成功返回 TDLib 最终的 `Message`，失败回 `{"@type":"error",…}`（映射成操作错误）。
-发新消息并挂 `reply_to`、编辑原命令消息、还是群里的 ephemeral 消息，都由宿主决定
-——插件不再自己拼 `chat_id` / `reply_to`。该服务是同步阻塞调用，只在本插件的业务
-线程里用。主动推送（没有命令消息可回，例如任务 panic 时的内部错误提示）继续用
-simplify 的 `send_message`；相册同理。
-
-## 渲染链路
-
-界面不在 Rust 里拼：整张卡片（HTML / CSS / 循环 / 条件 / 插值）都在
-`assets/card.html`（`<style>` + Vue 模板）。插件只把 `CardData` 映射成模板的
-`data`，交给宿主上的
-[`fuyubot.html2img`](https://github.com/xiaoqvan/fuyubot-plugins/tree/main/crates/fuyubot-plugin-html2img)
-插件的 `render` 方法（`vue: true`），拿回本机图片路径后以照片发送，发完即删。
-
-依赖用 `inject` 声明为**硬依赖**（写的是服务名 `fuyubot.html2img`，不是插件名）：
-没装 html2img 时本插件停在 Pending，比启动后每条命令都渲染失败更容易排查。
-
-交给服务的入参：
-
-| 字段 | 值 | 说明 |
-| --- | --- | --- |
-| `html` | `assets/card.html` | `<style>` + Vue 模板，编译期嵌入 |
-| `vue` | `true` | 按 Vue 模板编译，用 `data` 渲染 |
-| `data` | `view_data()` 的结果 | 模板字段 + 派生值（`creation_years` / `ip_location` / `icon`） |
-| `width` | 配置的卡片宽度，夹到 `900`–`1600` | 两列信息框的版面下限 |
-| `height` | `200` | `auto_height` 时只是下限，避免短卡片被默认视口撑出留白 |
-| `auto_height` | `true` | 高度按内容撑开 |
-| `scale` | `1.0` | 1:1 输出，与原本地渲染一致 |
-| `format` | `jpg` | 白底卡片，JPEG 体积小、Telegram 上传够用 |
-
-模板表达式受 vue-template-html 限制（没有 JS 运行时）：不能调用函数，也不能用
-`Math` / `Date` / `?.` / `??`。`Math.floor(creation_days / 365)` 这类结果先在
-Rust 里算好（`creation_years`），模板只读字段；HTML 转义由渲染器负责，Rust 不再
-自己拼 HTML，也不再自己转义。
-
-图片只有两种来源，都符合 html2img 的限制：网站图标是 `<img src="data:image/png;base64,…">`
-（先在 `core/favicon` 里缩到 ≤64px 再编码 PNG，整页 HTML 控制在 128 KiB 以内），
-其余图形是模板里的内联 SVG。服务调用是同步阻塞的，只在业务线程里发生。
-
-## 使用
+源码（`crates/fuyubot-plugin-whois/`）：
 
 ```text
-/whois example.com
-/whois https://www.example.com/path
-/whois 例子.中国
+plugin.json          # 插件元信息、entry 与 ABI 声明
+Cargo.toml           # cdylib + rlib 双目标，lib name = whois
+config.default.toml  # 默认配置（最低优先级，会被 [plugin.whois] 覆盖）
+README.md
+assets/card.html     # 卡片界面：<style> + Vue 模板
+examples/render_card_whois.rs
+src/
+  lib.rs             # 插件入口、启停、inject 声明 html2img 硬依赖
+  help.rs            # 向宿主命令表 fuyubot.host.commands 登记 /whois
+  cmd/               # 命令解析、任务分发、/whois 业务
+  core/              # 配置、域名清洗、接口请求、图标、数据模型
+  host/              # 宿主适配：订阅、消息网关、命令回复、工作线程
+  render/            # Vue 数据映射、图标 data URI、html2img 客户端
 ```
 
-不带参数时返回用法提示。
-
-命令前缀按以下顺序读取：
-
-1. `[plugin.whois].prefixes`
-2. 宿主顶层 `[config].PREFIXES`
-3. 缺省前缀 `/`、`!`、`！`、`.`、`#`
-
-## 处理流程
-
-1. 解析命令并提取第一个参数。
-2. 清理协议、用户信息、`www.`、端口、路径、查询串和末尾根点。
-3. 请求 Whois 接口。
-4. 未注册时回复文本并结束。
-5. 查询服务器 IP 归属；失败时读取 Whois 数据中的同名字段兜底。
-6. 抓取网站图标：`/favicon.ico` → `www.` 前缀 → 首页声明的图标；失败则用内置图标。
-7. 合并数据，映射成 Vue 模板的 `data`（派生 `creation_years` / `ip_location` / 图标 data URI）。
-8. 调 `fuyubot.html2img` 的 `render` 出图（宽度取配置、高度自适应、JPEG）。
-9. 通过 `fuyubot.host.command.reply` 回复照片（发新消息 / 编辑原命令 / ephemeral
-   由宿主决定），再删除服务产出的临时文件。
-
-## 项目结构
-
-| 路径 | 说明 |
-| --- | --- |
-| `src/lib.rs` | 插件入口、订阅生命周期和启停管理 |
-| `src/host/` | 宿主通信、TDLib 消息解析、命令回复通道与消息网关 |
-| `src/cmd/` | 命令解析、任务分发与 `/whois` 业务 |
-| `src/core/` | 配置、接口请求、域名清洗和数据模型 |
-| `src/render/` | Vue 卡片模板嵌入、图标 data URI 与 `fuyubot.html2img` 服务客户端 |
-| `assets/card.html` | 卡片界面：`<style>`（reset + UnoCSS 工具类）+ Vue 模板 |
-| `plugin.json` | 插件元信息与 ABI 声明 |
-
-模块职责保持单向：`host` 负责宿主通信，`cmd` 负责任务编排，`core` 负责数据与网络，
-`render` 负责版面与图像输出。
-
-## 构建
-
-在仓库根目录执行：
-
-```bash
-cargo build --release --locked -p fuyubot-plugin-whois
-```
-
-`--offline` 也可以加上，前提是本机 cargo 缓存里已经有过全部依赖。
-
-产物位于 `target/release/whois.dll`；Linux / macOS 分别是 `libwhois.so` /
-`libwhois.dylib`。`[lib] name` 固定为 `whois`，所以动态库文件名与 `plugin.json` 的
-`entry` 始终对得上。
-
-`Cargo.lock` 在仓库根目录统一维护，必须一起提交；不要随手 `cargo update`。
-
-静态检查插件导出符号：
-
-```bash
-./fuyubot-sdk.exe check target/release/whois.dll
-```
-
-## 发布包
-
-发布包按平台拆分，产物名形如 `whois-<version>-<platform>.zip`，ZIP 根目录直接是
-`plugin.json` 与动态库，不套目录。
-
-本地打包（在仓库根目录执行）：
-
-```powershell
-cargo build --release --locked -p fuyubot-plugin-whois
-python scripts\package.py --plugin whois --platform windows-x86_64 --version 0.1.1
-```
-
-产物位于 `dist/whois-0.1.1-windows-x86_64.zip`。
-
-Linux / macOS / Android 只切 `--platform`，脚本会按目标平台选库文件名并改写包内
-`entry`。Android 需要额外装 target、NDK 和 `cargo-ndk`：
-
-```powershell
-rustup target add aarch64-linux-android x86_64-linux-android
-cargo install cargo-ndk --locked
-cargo ndk -t arm64-v8a -t x86_64 --platform 24 build --release --locked -p fuyubot-plugin-whois
-python scripts\package.py --plugin whois --platform android-aarch64 --version 0.1.1
-python scripts\package.py --plugin whois --platform android-x86_64 --version 0.1.1
-```
-
-打包脚本会校验 `plugin.json` 的 `schema` / `id` / `kind` / `abi`，并核对命令行版本与
-`Cargo.toml`、`plugin.json` 一致；生成 ZIP 后还会重新打开检查条目、`version`、
-`platforms` 与 `entry`，避免发出装不上的包。
-
-多平台构建由仓库根目录的 `.github/workflows/release.yml` 完成：
-
-- 推送 `whois-v<版本>` tag：只构建 `plugin.json` 声明的五个平台，打包后挂到 Release；
-- 手动触发（Actions → release → Run workflow）：只产出各平台 artifact，不建 Release。
-
-```powershell
-git tag whois-v0.1.1
-git push origin whois-v0.1.1
-```
-
-从 Actions 页面下载的 artifact 外层会被 GitHub 再包一层 ZIP，真正用于安装的是其中的
-`whois-<version>-<platform>.zip`，或者 Release 页面上的同名资产。
-
-## 部署
-
-发布包解压后就是可直接加载的插件目录，把它放进宿主的插件目录：
+部署后（原生插件目录，ZIP 根即目录内容）：
 
 ```text
 plugins/whois/
-├── plugin.json
-└── whois.dll          # Linux / macOS 为 libwhois.so / libwhois.dylib
+  plugin.json
+  bin/whois.dll      # Linux: libwhois.so；macOS: libwhois.dylib；Android: libwhois.so
 ```
 
-`entry` 必须与动态库文件名一致；仓库里的 `plugin.json` 是 Windows 入口，打包脚本会按
-目标平台改写 `entry`、`platforms` 和 `version`。
+## 命令一览
 
-`target/`、`dist/`、动态库、压缩包和本地预览图片均已加入 `.gitignore`，不应提交
-到源码仓库。
+| 命令 | 权限/范围 | 作用 |
+| --- | --- | --- |
+| `/whois <域名>` | `user`，私聊 / 群聊 | 查询域名 Whois 与 IP 归属，渲染信息卡片并以照片回复 |
 
-## 配置
+命令前缀来自 `[plugin.whois].prefixes`；未配置时跟随宿主 `[config].PREFIXES`，最后回退到 `/ ! ！ . #`。
 
-在 `fuyubot.toml` 中增加 `[plugin.whois]` 段。所有字段均可选：
+## 配置一览
+
+配置段 `[plugin.whois]`，所有字段可选：
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `whois_api_url` | `https://whoiscx.com/api/whois/info/` | Whois 查询接口（须以 http/https 开头） |
+| `ip_api_url` | `https://whoiscx.com/api/whois/ip/` | IP 归属查询接口 |
+| `width` | `1200` | 卡片宽度（px），自动夹到 `900`–`1600` |
+| `timeout_ms` | `15000` | 单次查询超时（毫秒）；也接受 `timeout`（秒） |
+| `favicon` | `true` | 是否抓取网站图标，关掉后固定用内置图标 |
+| `favicon_timeout_ms` | `6000` | 抓图标的整体预算，夹到 `500`–`30000` 毫秒 |
+| `prefixes` | 跟随宿主 | 命令前缀列表；不写则用宿主 `[config].PREFIXES`，再回退 `/ ! ！ . #` |
+
+`config.default.toml` 只固化前六个字段的默认值；`prefixes` 故意留空，避免盖掉宿主全局前缀。
+
+## 使用说明
+
+**安装**：在插件商店安装；或 `fuyubot plugin install ./whois`；或把发布包解压到 `plugins/whois/` 后重启宿主。
+
+**最小配置**：
 
 ```toml
 [plugin.whois]
 whois_api_url = "https://whoiscx.com/api/whois/info/"
-ip_api_url    = "https://whoiscx.com/api/whois/ip/"
-width         = 1200
-timeout_ms    = 15000
-favicon       = true
+ip_api_url = "https://whoiscx.com/api/whois/ip/"
+width = 1200
+timeout_ms = 15000
+favicon = true
 favicon_timeout_ms = 6000
-prefixes      = ["/", "!", "！", ".", "#"]
 ```
 
-| 字段 | 缺省值 | 说明 |
+**典型用法**：
+
+- `/whois example.com`：裸域名。
+- `/whois https://www.example.com/path`：自动裁掉协议、`www.`、路径。
+- `/whois 例子.中国`：中文域名。
+- 不带参数时返回用法提示；接口限流时返回失败提示。
+
+**构建与打包**（仓库根目录）：
+
+```bash
+cargo build --release -p fuyubot-plugin-whois
+python scripts/package.py --plugin whois --platform windows-x86_64
+```
+
+**发布**：打 `<id>-v<version>` 形式的 tag 并推送，CI 构建 `plugin.json` 声明的平台。
+
+```bash
+git tag whois-v0.1.4 && git push origin whois-v0.1.4
+```
+
+## 项目依赖（软/硬）
+
+| 类型 | 服务 / 要求 | 说明 |
 | --- | --- | --- |
-| `whois_api_url` | `https://whoiscx.com/api/whois/info/` | Whois 查询接口 |
-| `ip_api_url` | `https://whoiscx.com/api/whois/ip/` | IP 归属查询接口 |
-| `width` | `1200` | 卡片宽度，限制在 `900` 至 `1600` 像素 |
-| `timeout_ms` | `15000` | 单次 HTTP 查询超时，单位毫秒 |
-| `favicon` | `true` | 是否抓取网站图标，关掉后固定使用内置图标 |
-| `favicon_timeout_ms` | `6000` | 抓取网站图标的整体预算，限制在 `500` 至 `30000` 毫秒 |
-| `prefixes` | 跟随宿主配置 | 插件识别的命令前缀 |
-
-## 运行行为
-
-- 卡片宽度低于 `900px` 时两列信息会过度挤压，因此由插件自动夹取到允许范围。
-- 渲染依赖宿主上的 `fuyubot.html2img` 插件（硬依赖）：没装时本插件停留在 Pending；
-  服务不可用、HTML 超限或渲染报错时，命令回复失败提示而不是崩掉。
-- 网站图标只从目标站点自己取（`/favicon.ico`、`www.` 前缀、首页 `<link rel="icon">`），
-  不经过第三方图标服务；站点不可达、返回 403 或没有图标时，卡片回退到内置的渐变地球图标。
-- 图标抓取有独立预算，最多让 `/whois` 多等 `favicon_timeout_ms`（缺省 6 秒）；IP 字面量
-  和 `localhost` 这类主机名不会去抓，避免被用来探测内网。
-- 系统缺少合适的中文字体时，卡片中的 CJK 字符可能使用系统回退字体。
-- Whois 数据来自配置的公开接口；接口不可用或限流时，命令会返回失败提示。
-- 插件停止时会等待当前阻塞操作到达安全边界；图片上传网关的超时上限为 120 秒。
-- 回复命令时的消息形态（发新消息 / 编辑原命令 / ephemeral）由宿主决定，插件只提供内容。
+| 硬依赖 | `fuyubot.html2img` | 出图服务（`render`，`vue: true`）。由 `Plugin::inject` 声明，未安装时插件停在 Pending |
+| 软依赖 | 无 | IP 归属、网站图标都取自查询目标本身，均失败也不阻断出图 |
+| 宿主内建 | `fuyubot.host.commands`、`fuyubot.host.command`、simplify `sendMessage` | 宿主自带，不算插件依赖，只用于登记 `/help`、回复命令与主动推送 |
+| 宿主要求 | Native ABI v6 | 宿主需支持 ABI v6 与服务调用（`call_service`） |

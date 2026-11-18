@@ -1,0 +1,4 @@
+# musiccard 默认配置：并入 [plugin.musiccard]，优先级低于用户配置与运行时落盘值。
+# 键名、默认值与 src/config.rs 一致；命令前缀读宿主 [config].PREFIXES，不属于本段。
+
+request_timeout_ms = 15000

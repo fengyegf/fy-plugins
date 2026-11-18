@@ -4,7 +4,7 @@
   "name": "System",
   "version": "0.1.4",
   "kind": "native",
-  "entry": "system.dll",
+  "entry": "bin/system.dll",
   "abi": 6,
   "platforms": [
     "windows-x86_64",
@@ -13,5 +13,10 @@
     "android-aarch64",
     "android-x86_64"
   ],
-  "description": "查看宿主机系统信息与机器人状态，渲染成信息卡片并以照片回复。"
+  "depends": [
+    "fuyubot.html2img"
+  ],
+  "description": "查看宿主机系统信息与机器人状态，渲染成信息卡片并以照片回复。",
+  "homepage": "https://github.com/fengyegf/fy-plugins/tree/main/crates/fuyubot-plugin-system",
+  "config": "config.default.toml"
 }

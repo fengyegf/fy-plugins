@@ -31,13 +31,13 @@ stage() { # $1=id $2=target/debug 里的 dll $3=plugin.json 声明的 entry
   cp "crates/fuyubot-plugin-$1/plugin.json" "$OUT/plugins/$1/plugin.json"
   cp "target/debug/$2" "$OUT/plugins/$1/$3"
 }
-stage epic      epic.dll      epic.dll
-stage kfc       kfc.dll       kfc.dll
+stage epic      epic.dll      bin/epic.dll
+stage kfc       kfc.dll       bin/kfc.dll
 stage musiccard musiccard.dll bin/musiccard.dll
-stage ppxfy     ppxfy.dll     ppxfy.dll
-stage system    system.dll    system.dll
-stage trending  trending.dll  trending.dll
-stage whois     whois.dll     whois.dll
+stage ppxfy     ppxfy.dll     bin/ppxfy.dll
+stage system    system.dll    bin/system.dll
+stage trending  trending.dll  bin/trending.dll
+stage whois     whois.dll     bin/whois.dll
 
 # html2img 是 epic / kfc / musiccard / system / trending / whois 的硬依赖（不在本仓），从宿主目录借一份；
 # fuyubot.mongo 是 ppxfy 的可选软依赖，一并带上，缺了也不影响启动。

@@ -1,167 +1,136 @@
-# bidibot（论坛群话题式中转，v0.1.0）
+# Bidibot 双向私聊中转
 
-陌生人私聊 bot → bot 把消息**转发**进你指定的论坛群，**一个用户一个话题**（话题名 = 用户昵称）；
-你在话题里回复，bot 用自己身份把内容发回给那个用户。
+`bidibot` · v0.1.0 · ABI v6 · Windows / Linux / macOS / Android
 
-- 插件 id：`bidibot`（配置段 `[plugin.bidibot]`，ABI v6）
-- 本地库：`data/bidibot/db.json`（话题映射 / 封禁 / 警告 / 用户档案）
-- 提示词：内置 `skills/ad.md`、`skills/translate.md`，可用 `skills_dir` 覆盖
+## 项目介绍
 
-## 它保证什么
+Bidibot 把陌生人私聊收进一个论坛群：每个用户一个话题（话题名 = 用户昵称），用户消息**真转发**进话题，主人在话题里回复后以 bot 自己的身份发回用户，用户看不到主人身份 / 账号。带广告判定与三次熔断、限流、单向拉黑，状态落在本地库。
 
-| 承诺 | 怎么做到的 |
-| --- | --- |
-| 一个用户一个话题 | 首次来消息 `createForumTopic`（名字 = 昵称），thread id 落库；之后都转发进这个话题 |
-| 主人身份不外泄 | 群 → 用户方向只有 `sendMessage`（文本）或 `forwardMessages(send_copy=true)`（媒体，复制内容不带"转发自"头部）；用户看不到主人的账号 / 用户名 |
-| 用户消息保真 | 用户 → 群方向是**真转发**，图片 / 文件 / 语音都原样进话题，看得出是哪个用户 |
-| 回调不阻塞 | `updateNewMessage` 回调只投递 channel，建话题 / 转发 / 广告判定都在 `bidibot-task` 线程 |
-| 拉黑只影响私聊中转 | 被封禁 / 熔断的用户仍能用 `/bidihelp`；群里管理照常 |
-| 状态可恢复 | 话题映射、封禁、警告每次变更都原子落盘，重启不丢 |
+- 用户 → 群：私聊 → 命令 / 封禁 / 广告 / 限流检查 → 确保话题（首次用昵称建 `createForumTopic`）→ 原消息转发进话题。
+- 群 → 用户：主人在话题里回复 → 文本 `sendMessage` 重发、媒体 `forwardMessages(send_copy)` 复制内容 → 不带转发头、不暴露主人。
+- 名片：头像 / 名称 / @用户名 · ID 交给宿主 `fuyubot.html2img` 渲染成图片；没有渲染器时降级为头像 + 文字，再降为纯文字。
 
-## 怎么搭
+## 目录结构
 
-1. 建一个**开启话题**的超级群（Forum），把 bot 拉进去；
-2. 给 bot 管理员权限，至少勾上**管理话题**（`can_manage_topics`）——不然建不了话题；
-3. 群 id 填进配置（负数，例如 `-1001234567890`）：拿 id 最省事的办法是把群消息转发给
-   `@userinfobot` 之类，或者看 `fuyubot` 日志里 `updateNewMessage` 的 `chat_id`。
+```text
+crates/fuyubot-plugin-bidibot/
+  Cargo.toml
+  plugin.json
+  config.default.toml
+  README.md
+  assets/card.html      名片 Vue 模板（编译进动态库）
+  skills/ad.md          广告判定提示词（缺失 / 为空时用内置副本）
+  src/
+    lib.rs              入口、生命周期、html2img 软依赖探测
+    help.rs             向宿主命令表登记 /bidi* 命令
+    relay.rs            双向中转主链路（私聊 ⇄ 群话题）
+    cmd/                命令层：分派 mod / 管理命令 owner / 前缀解析 parser
+    core/               配置、本地库、广告判定、LLM、skills
+    host/               消息网关与业务线程
+    render/             名片数据与 fuyubot.html2img 客户端
+```
 
-## 配置
+部署后（ZIP 根 = 插件目录内容）：
+
+```text
+plugins/bidibot/
+  plugin.json
+  bin/bidibot.dll        # Linux: libbidibot.so / macOS: libbidibot.dylib
+  config.default.toml
+  skills/ad.md           # 可选：覆盖内置广告提示词
+```
+
+运行期数据写在宿主工作目录的 `data/bidibot/db.json`（首次运行自动创建）；话题映射、封禁、警告、用户档案都在这里。
+
+## 命令一览
+
+| 命令 | 权限 / 范围 | 作用 |
+| --- | --- | --- |
+| `/bidistart` | 所有人 · 私聊 + 群 | 欢迎语与用法提示 |
+| `/bidihelp` | 所有人 · 私聊 + 群 | 帮助；管理员看到多出的管理命令列表 |
+| `/bidistatus` | 主人 · 群 | 运行状态：群、话题数、库大小、计数 |
+| `/bidilist` | 主人 · 群 | 拉黑列表（前 20 条） |
+| `/bidiban [id] [原因]` | 主人 · 群 | 拉黑；在该用户的话题里不带 id 即拉黑话题主人 |
+| `/bidiunban [id]` | 主人 · 群 | 解除拉黑 |
+| `/bidiwarn [id]` | 主人 · 群 | 查看某用户的广告警告数 |
+| `/bidiclear [id]` | 主人 · 群 | 清零警告（不解除拉黑） |
+| `/bidiword add\|del\|list [词]` | 主人 · 群 | 维护广告关键词 |
+| `/bidisay [id] <文字>` | 主人 · 群 | 以 bot 身份主动给某用户发一条 |
+| `/bidicard` | 主人 · 群 | 在当前话题里重发该用户的名片 |
+
+命令前缀来自 `[plugin.bidibot].prefixes`（默认 `/`、`!`、`！`、`.`、`#`）；宿主顶层 `[config].PREFIXES` 仅在插件未给前缀时兜底。管理命令登记为 `role = "owner"`，宿主的 `[roles].owners` 必须包含 `owner_id`，否则会被命令闸门拦下。
+
+## 配置一览
+
+配置段 `[plugin.bidibot]`，键名同时接受 snake_case 与全大写写法。
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `group_id` | `0` | 论坛超级群 id（负数）；`0` = 未配置，私聊只回「暂时不可用」 |
+| `owner_id` | `0` | 允许下管理命令 / 回复用户的主人 user id；`0` = 管理命令全部不可用 |
+| `ad_mode` | `keyword` | 广告判定：`off` / `keyword` / `llm`；配 `llm` 但没有 AI 凭据时自动退回 `keyword` |
+| `ai_base_url` | `https://api.openai.com/v1` | OpenAI 兼容 API 地址（仅 `ad_mode = "llm"` 使用） |
+| `ai_api_key` | 空 | 大模型 API key；留空 = 不用大模型 |
+| `ai_model` | `gpt-4o-mini` | 模型名 |
+| `ai_timeout_ms` | `20000` | 单次大模型判定超时（毫秒，最小 1000） |
+| `ai_temperature` | `0.2` | 采样温度（0–2） |
+| `auto_ban_after` | `3` | 广告警告累计到多少次自动熔断拉黑（最少 1） |
+| `warn_cooldown_secs` | `30` | 同一用户两次警告的最小间隔（秒） |
+| `topic_name_max` | `28` | 话题名截断长度（Telegram 上限 128） |
+| `topic_icon_color` | `7322096` | 话题图标颜色（`0x6FB9F0`），只认 6 个允许值，非法值退回默认 |
+| `topic_card` | `true` | 新建话题时是否发送用户名片 |
+| `card_image` | `true` | 名片优先用 `fuyubot.html2img` 渲染成图片（无渲染器自动降级） |
+| `card_width` | `460` | 名片图 CSS 宽度（px，2 倍图输出，范围 320–1200） |
+| `store_path` | `data/bidibot/db.json` | 本地库路径（相对宿主工作目录，原子落盘） |
+| `skills_dir` | `skills/bidibot` | 广告提示词目录；文件缺失 / 为空时用内置 `ad.md` |
+| `max_relay_chars` | `3500` | 单条文本中转的最大字符数（200–4096，超出截断） |
+| `send_timeout_ms` | `30000` | 单次发送等待超时（毫秒，1000–120000） |
+| `rate_limit_per_min` | `12` | 单用户每分钟最多中转条数；`0` = 不限制 |
+| `notify_blocked_every_secs` | `3600` | 被封禁用户最短多少秒才重复提示一次 |
+| `command_table` | `true` | 是否把 `/bidi*` 登记进宿主命令表（`/help` 数据源） |
+| `ad_keywords` | `[]` | 广告关键词表；非空 = 整体替换内置词表 |
+| `ad_keywords_extra` | `[]` | 追加到（内置或替换后的）词表 |
+| `prefixes` | `["/", "!", "！", ".", "#"]` | 命令前缀列表 |
+
+## 使用说明
+
+**安装**：从插件商店安装；或 `fuyubot plugin install ./bidibot`；或把发布包解压到 `plugins/bidibot/` 后重启宿主。
+
+**准备群**：建一个开启话题的超级群（Forum），把 bot 拉进去并给「管理话题」权限；群 id 填 `group_id`（负数），主人 user id 填 `owner_id`。
+
+最小配置：
 
 ```toml
 [plugin.bidibot]
-# —— 必填 ——
-group_id        = -1001234567890   # 论坛群 id（0 = 未配置，插件只回"暂时不可用"）
-owner_id        = 123456789        # 允许在群里下命令 / 回复用户的人（0 = 不校验，谁都能回）
-# —— 话题 ——
-topic_name_max  = 28               # 话题名截断长度（Telegram 上限 128）
-topic_icon_color = 7322096         # 只认 6 个值：0x6FB9F0/0xFFD67E/0xCB86DB/0x8EEE98/0xFF93B2/0xFB6F5F
-topic_card      = true             # 新话题里发一条名片（ID / 用户名）
-card_image      = true             # 有 fuyubot.html2img 时渲染图片卡片（没有自动降级）
-card_width      = 460              # 名片图 CSS 宽度（输出 2 倍图；460 = 紧凑卡片）
-# —— 大模型（只用于广告判定：ad_mode = "llm" 时需要）——
-ai_base_url     = "https://api.openai.com/v1"
-ai_api_key      = ""
-ai_model        = "gpt-4o-mini"
-ai_timeout_ms   = 20000
-ai_temperature  = 0.2
-# —— 广告与熔断 ——
-ad_mode         = "keyword"        # off | keyword | llm
-auto_ban_after  = 3
-warn_cooldown_secs = 30
-ad_keywords     = []               # 非空 = 替换内置词表
-ad_keywords_extra = []             # 追加
-# —— 行为 ——
-max_relay_chars = 3500
-send_timeout_ms = 30000
-rate_limit_per_min = 12
-notify_blocked_every_secs = 3600
-# —— 存储 ——
-store_path      = "data/bidibot/db.json"
-skills_dir      = "skills/bidibot"
-command_table   = true
-prefixes        = ["/", "!", "！", ".", "#"]
-```
+group_id = -1001234567890    # 论坛群 id，0 = 未配置
+owner_id = 123456789         # 主人 user id，0 = 管理命令不可用
+ad_mode = "keyword"          # off | keyword | llm
+card_image = true            # 有 fuyubot.html2img 时渲染名片图
 
-### 跟宿主配置的配合（重要）
-
-主人命令登记为 `role = "owner"`，宿主的命令闸门按 `[roles].owners` 判定：
-
-```toml
 [roles]
-owners = [123456789]     # 与 [plugin.bidibot].owner_id 一致
+owners = [123456789]         # 必须包含 owner_id，否则宿主会拦下 /bidi*
 ```
 
-不填这一项时宿主会把 `/bidi*` 当成无权命令拦掉（日志 `命令被策略拦下：只发 update 通用通道`），
-插件收不到。用户侧中转不受影响，只有群里的管理命令会失灵。
+**典型用法**：
 
-## 名片（话题里的第一条消息）
+1. 用户直接私聊 bot，消息原样转进其专属话题；发命令前缀开头的消息不会被转发。
+2. 主人在该话题里直接回复（文本或媒体）即回到用户；General 话题里没有对应关系，用 `/bidisay <id> <文字>`。
+3. `/bidilist` 查看黑名单，`/bidiban` 拉黑、`/bidiunban` 解封，`/bidiword` 维护广告词表。
 
-新话题建好后，插件会发一张**用户名片**，分三档降级：
-
-1. 装了 `fuyubot.html2img`（**软依赖**，不用 inject 声明）→ 渲染成图片卡片（**PNG 透明底，图里只有卡片本身，没有页面背景**），只展示三行：
-   **头像 / 名称 / @用户名 · ID**；
-2. 有头像但没渲染器 → 发头像照片，文字信息当 caption；
-3. 都没有 → 纯文字版（没有"新对话"这种标题）。
-
-名片随时可以重发：在某个用户的话题里发 `/bidicard`。
-
-- 头像来自 TDLib `profile_photo.small`，下载后转 data URI 内嵌进卡片（不引外部资源）；
-- 模板在 `assets/card.html`（Vue + 内联 CSS，编译进 dll）；
-- `card_image = false` 可以强制不用图片卡片；`card_width` 调卡片宽度（默认 720，2 倍图输出）。
-
-## 命令不中转
-
-- **私聊**：任何以命令前缀开头的消息都不转发进群（不只是本插件认得的命令）。
-  也就是 `/start`、`/help`、别的插件的命令、打错的 `/xxx` 都不会出现在话题里。
-- **群里**：没被命令层认领的命令（其他人的命令 / 打错的命令）也不会转给用户。
-
-## 翻译
-
-插件**不做翻译**：Telegram 客户端自带整段翻译，用户/主人各自点一下就行。
-
-
-## 命令（在群里用）
-
-| 命令 | 谁能用 | 作用 |
-| --- | --- | --- |
-| `/bidistart` | 任何人 | 欢迎语（重新看一遍怎么用）——**不叫 `/start`**：那是宿主内建 start 插件的命令，同名登记会被拒 |
-| `/bidihelp` | 任何人 | 帮助（私聊里也能用） |
-| `/bidistatus` | 主人 | 运行状态：群、话题数、库大小、计数 |
-| `/bidiban [id] [原因]` | 主人 | 拉黑；**在某个话题里发就不用带 id**（目标 = 话题主人） |
-| `/bidiunban <id>` | 主人 | 解封 |
-| `/bidilist` | 主人 | 拉黑列表 |
-| `/bidiwarn <id>` / `/bidiclear <id>` | 主人 | 看 / 清零警告 |
-| `/bidiword add|del|list` | 主人 | 维护广告关键词 |
-| `/bidisay <id> <文字>` | 主人 | 主动给某个用户发一条（General 里也能用） |
-| `/bidicard` | 主人 | 在当前话题里重发这个用户的名片 |
-
-**怎么回复用户**：在对应话题里直接说话即可（文本重发、媒体复制），也可以引用某条消息再回；
-不需要 @ 谁，话题本身就是"这个用户"。
-
-## 本地库
-
-`data/bidibot/db.json`，每次变更原子落盘；坏文件会备份成 `db.json.bak.<时间戳>` 再重建空库。
-
-```json
-{
-  "version": 1,
-  "topics":   { "<user_id>": { "user_id": 0, "thread_id": 0, "name": "", "created_at": 0, "card_message_id": 0 } },
-  "bans":     { "<user_id>": { "user_id": 0, "at": 0, "reason": "", "by": 0, "auto": false } },
-  "warns":    { "<user_id>": { "count": 0, "last_at": 0, "last_reason": "" } },
-  "profiles": { "<user_id>": { "user_id": 0, "name": "", "username": null, "lang": null, "first_seen": 0, "base_message_id": 0 } },
-  "reports":  {},
-  "last_notice": { "<user_id>": 0 }
-}
-```
-
-- `topics` 是"用户 ↔ 话题"的唯一映射；删掉某条再重启，下次该用户来消息会**重新建话题**。
-- 主人把话题删了也不用改库：转发失败时插件会自动清记录、重建一次话题。
-- `reports` 是 v0.1 的私聊映射遗留字段，v0.2 不再使用，保留只为旧库能直接读。
-
-## 离线回放
-
-```bash
-fuyubot.exe run --replay update.json --plugin-dir plugins --replay-wait 6000
-```
-
-回放里 `createForumTopic` / `forwardMessages` / `sendMessage` 都只留档不真发，所以：
-能看到"要建哪个话题、转发哪条消息、发给谁"，但拿不到真实 thread id（后续消息会再建一次话题）。
-要验完整链路（话题复用、话题内回复回到用户）必须上真账号。
-
-## 构建 / 验证
+**构建与打包**：
 
 ```bash
 cargo build --release -p fuyubot-plugin-bidibot
-cargo test -p fuyubot-plugin-bidibot
-cargo clippy -p fuyubot-plugin-bidibot --all-targets -- -D warnings
-python scripts/check_abi.py target/release/bidibot.dll
 python scripts/package.py --plugin bidibot --platform windows-x86_64
 ```
 
-## 已知边界
+**发布**：`git tag bidibot-v0.1.0 && git push origin bidibot-v0.1.0`。
 
-- 只处理私聊与 `group_id` 指定那一个群；别的群 / 频道一律忽略。
-- 匿名管理员（`messageSenderChat`）发的消息无法归属，忽略。
-- 主人身份只认 `owner_id` 一个人；群里其他人聊天不会转给用户。
-- 话题名在创建时定下，用户后来改昵称不会自动改话题名（需要的话删话题让插件重建）。
-- 建话题失败（bot 不是管理员 / 没管理话题权限）会在日志里报错，并告诉用户"暂时送不出去"。
+## 项目依赖（软/硬）
+
+| 类型 | 名称 | 说明 |
+| --- | --- | --- |
+| 硬依赖 | 无 | 不装任何插件即可运行；`fuyubot.host.commands`、`fuyubot.host.cache` 属宿主内建服务，不算插件依赖 |
+| 软依赖 | `fuyubot.html2img` | 名片图片卡片；未安装时自动降级为头像 + 文字或纯文字，不影响中转 |
+| 外部 API | OpenAI 兼容接口 | 仅 `ad_mode = "llm"` 时需要，插件直接 HTTP 调用，不占宿主服务 |
+| 宿主 | ABI v6 | 低于 v6 的宿主无法加载本插件；群必须是已开启话题的超级群 |

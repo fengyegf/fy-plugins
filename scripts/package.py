@@ -12,7 +12,8 @@
 - 产物名：`<id>-<version>-<platform>.zip`；
 - ZIP 根就是插件目录内容，`plugin.json` 在根，不额外套目录；
 - `plugin.json` 的 `version` / `platforms` / `entry` 按目标平台改写；
-- 动态库放在 `entry` 指向的位置（多数插件在根，musiccard 在 `bin/`）；
+- 动态库放在 `entry` 指向的位置，统一是 `bin/`（新分发包布局：plugin.json + bin/）；
+- `plugin.json` 的 `config` 指向的默认配置（如 `config.default.toml`）自动随包带入；
 - crate 根下的 `models/` 与 `NOTICE.md` **自动带入**（存在才带，CI 不用加参数）；
 - `--assets`（可重复）再追加别的额外文件，路径**相对 crate 根**，ZIP 内保持原路径；
   两者都没有时包内仍然只有 `plugin.json` + 动态库（旧插件行为不变）；
@@ -54,6 +55,43 @@ MAX_ENTRIES = 2000
 
 # crate 根下存在就自动打进 bundle 的资产：内置模型目录与许可声明。
 AUTO_ASSETS = ("models", "NOTICE.md")
+
+# bundle 内不允许出现的目录（构建产物 / 依赖缓存）。
+FORBIDDEN_DIRS = ("node_modules", ".venv", "target", ".git")
+
+# Windows 保留名：大小写都算冲突，作为文件 / 目录名会被商城拒绝。
+WINDOWS_RESERVED = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
+
+def check_zip_name(arcname: str) -> None:
+    """校验 bundle 内路径：拒绝 Windows 保留名、以点 / 空格结尾的路径段。"""
+    for part in Path(arcname).parts:
+        if part in ("", "."):
+            continue
+        if part != part.rstrip(" ."):
+            raise SystemExit(f"bundle 内文件名不能以点或空格结尾：{arcname!r}")
+        if part.split(".", 1)[0].upper() in WINDOWS_RESERVED:
+            raise SystemExit(f"bundle 内文件名不能使用 Windows 保留名：{arcname!r}")
+
+
+def check_entry(manifest: dict) -> str:
+    """校验 entry：相对路径、位于 bin/ 下、仓库内（Windows）以 .dll 结尾。"""
+    entry = manifest.get("entry", "")
+    if not isinstance(entry, str) or not entry:
+        raise SystemExit("plugin.json 缺少 entry")
+    path = Path(entry)
+    if "\\" in entry or path.is_absolute() or ".." in path.parts:
+        raise SystemExit(f"plugin.json 的 entry 必须是包内相对路径：{entry!r}")
+    if len(path.parts) < 2 or path.parts[0] != "bin":
+        raise SystemExit(f"plugin.json 的 entry 必须放在 bin/ 下：{entry!r}")
+    if path.suffix != ".dll":
+        raise SystemExit(f"plugin.json 的 entry（Windows）必须是 .dll：{entry!r}")
+    check_zip_name(entry)
+    return entry
 
 
 def normalize_version(value: str) -> str:
@@ -111,6 +149,7 @@ def load_plugin(plugin: str) -> tuple[Path, dict, str, str]:
     # 当前宿主支持 ABI v5（旧）/ v6（新），bundle 按插件自己声明的版本打。
     if manifest.get("kind") != "native" or manifest.get("abi") not in (5, 6):
         raise SystemExit("plugin.json 必须声明 native kind 和 ABI 5 或 6")
+    check_entry(manifest)
     return crate, manifest, version, library_name
 
 
@@ -153,6 +192,8 @@ def asset_entries(crate: Path, assets: list[str]) -> list[tuple[str, Path]]:
         relative = Path(text)
         if relative.is_absolute() or ".." in relative.parts:
             raise SystemExit(f"--assets 必须是 crate 内的相对路径：{raw!r}")
+        if any(part in FORBIDDEN_DIRS for part in relative.parts):
+            raise SystemExit(f"--assets 不能包含构建产物 / 依赖缓存：{raw!r}")
         source = root / relative
         if not source.exists():
             raise SystemExit(f"--assets 指向的资产不存在：{source}")
@@ -167,7 +208,13 @@ def asset_entries(crate: Path, assets: list[str]) -> list[tuple[str, Path]]:
         if not files:
             raise SystemExit(f"--assets 目录里没有文件：{source}")
         for file in files:
-            entries.setdefault(file.relative_to(root).as_posix(), file)
+            if file.is_symlink():
+                raise SystemExit(f"bundle 不能包含符号链接：{file}")
+            arcname = file.relative_to(root).as_posix()
+            if any(part in FORBIDDEN_DIRS for part in Path(arcname).parts):
+                raise SystemExit(f"bundle 不能包含构建产物 / 依赖缓存：{arcname}")
+            check_zip_name(arcname)
+            entries.setdefault(arcname, file)
     return sorted(entries.items())
 
 
@@ -244,9 +291,18 @@ def main() -> int:
 
     entry = entry_for(manifest, library)
 
-    # 额外资产：crate 根的 models/ 与 NOTICE.md 自动带入（存在才带），--assets 追加。
-    # ZIP 内路径都保持相对 crate 根的原样。
+    # 额外资产：plugin.json 的 config、crate 根的 models/ 与 NOTICE.md 自动带入
+    # （存在才带），--assets 追加。ZIP 内路径都保持相对 crate 根的原样。
     automatic = [name for name in AUTO_ASSETS if (crate / name).exists()]
+    config_ref = manifest.get("config")
+    if config_ref is not None:
+        if not isinstance(config_ref, str) or not config_ref:
+            raise SystemExit("plugin.json 的 config 必须是非空相对路径")
+        if Path(config_ref).is_absolute() or ".." in Path(config_ref).parts:
+            raise SystemExit(f"plugin.json 的 config 必须是包内相对路径：{config_ref!r}")
+        if not (crate / config_ref).is_file():
+            raise SystemExit(f"plugin.json 的 config 指向的文件不存在：{crate / config_ref}")
+        automatic.insert(0, config_ref)
     assets = asset_entries(crate, [*automatic, *args.assets])
     for arcname, _ in assets:
         if arcname == "plugin.json" or arcname == entry:

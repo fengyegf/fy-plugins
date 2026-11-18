@@ -34,3 +34,7 @@
 .DS_Store
 Thumbs.db
 /docs
+
+# Python 缓存
+__pycache__/
+*.pyc

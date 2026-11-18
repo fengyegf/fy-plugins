@@ -1,6 +1,6 @@
 //! 消息网关：把 ABI v6 的两条发送通道包成几个直白的方法。
 //!
-//! 两条通道分工明确（见 `docs/abi-v6-spec.md` 第 4 条）：
+//! 两条通道分工明确（见 FuyuBot 文档 · 插件开发 · 调用 TDLib 第 4 条）：
 //!
 //! - **回复某条命令消息**（`reply_to = Some(message_id)`）：走宿主的
 //!   [`fuyubot.host.command`](super::command) `reply`，由宿主决定是「发新消息并挂

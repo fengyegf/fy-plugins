@@ -1,0 +1,15 @@
+# epic 默认配置：最低优先级，会被 fuyubot.toml 的 [plugin.epic] 覆盖。
+api_url = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions"
+locale = "zh-CN"
+country = "CN"
+timezone_offset_hours = 8
+timeout_ms = 20000
+scale = 2.0
+max_per_row = 4
+max_cards = 8
+card_width = 280
+cover_height = 157
+caption = ""
+user_agent = "Mozilla/5.0 (compatible; fuyubot-epic/0.1)"
+
+# proxy 留空即直连，故不写；命令前缀跟随宿主 [config].PREFIXES。

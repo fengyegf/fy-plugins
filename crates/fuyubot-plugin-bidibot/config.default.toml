@@ -1,0 +1,26 @@
+# bidibot 默认配置（最低优先级，[plugin.bidibot] 中同名键会覆盖）
+group_id = 0
+owner_id = 0
+ad_mode = "keyword"
+ai_base_url = "https://api.openai.com/v1"
+ai_api_key = ""
+ai_model = "gpt-4o-mini"
+ai_timeout_ms = 20000
+ai_temperature = 0.2
+auto_ban_after = 3
+warn_cooldown_secs = 30
+topic_name_max = 28
+topic_icon_color = 7322096
+topic_card = true
+card_image = true
+card_width = 460
+store_path = "data/bidibot/db.json"
+skills_dir = "skills/bidibot"
+max_relay_chars = 3500
+send_timeout_ms = 30000
+rate_limit_per_min = 12
+notify_blocked_every_secs = 3600
+command_table = true
+ad_keywords = []
+ad_keywords_extra = []
+prefixes = ["/", "!", "！", ".", "#"]

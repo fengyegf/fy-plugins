@@ -1,231 +1,122 @@
-# system — 系统信息卡片（Rust 插件）
+# System
 
-TS 版 `E:\Fuyu_TDBot\plugins\system`（`index.ts` + `system.vue`，Vue + satori + resvg 管线）
-的 Rust 迁移版：
+插件 id：`system` ｜ 版本：0.1.4 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
-`/system` → 采集宿主机的 CPU / 内存 / 磁盘 → 查询 TDLib 版本、机器人资料、
-管理员资料与已加载插件 → 渲染成一张 1400×800 的信息卡片 → 以照片回复命令消息 → 删除渲染产物。
+## 项目介绍
 
-图像生成不再由插件自己完成：界面在 `assets/card.html`（`<style>` + Vue 模板，正文来自
-TS 版 `system.vue`），Rust 只把业务数据映射成模板的 `data`，渲染交给宿主上的
-[`fuyubot.html2img`](https://github.com/xiaoqvan/fuyubot-plugins/tree/main/crates/fuyubot-plugin-html2img)
-插件（服务名 `fuyubot.html2img`，方法 `render`，`vue: true`）。渲染器是 hyper-render 的
-本地 fork（Blitz + Stylo + Taffy + Vello CPU），**纯 Rust、无 Chromium / Node**，但只存在于
-html2img 插件里，本插件不再链接渲染引擎，也不再下载 / 合成任何位图（头像除外，见下）。
+`/system` 一条命令采集宿主机与机器人状态，渲染成一张 1400×800 的信息卡片并以照片回复：CPU / 内存 / 磁盘由 `sysinfo` 采集，TDLib 版本、机器人资料、管理员资料走宿主的 TDLib 调用，已加载插件清单来自宿主 `list_plugins`。
 
-## 依赖
+插件自己不出图：业务数据映射成 `assets/card.html` 里的 Vue 模板数据，交给宿主上的 `fuyubot.html2img` 服务渲染，发送后删除临时产物。外部依赖失败都降级不炸——TDLib 查不到显示「未知」，头像 / 背景缺失自动省略。
 
-- **必须安装 `fuyubot.html2img` 插件**：本插件用 `Plugin::inject` 声明了硬依赖，
-  宿主会在服务就绪后再启动 system；没装时插件停在 Pending（不静默失败）。
-- 卡片头像缩到 ≤192px 后内嵌为 `data:image/jpeg;base64,…`，由 html2img 加载；
-  背景图是一条**公网 URL**，同样由 html2img 拉取，本进程不下载、不缓存。
-- 命令登记走宿主预置的 `fuyubot.host.commands`（`start()` 里 `register`）：
-  命令表归宿主，图片版 `/help` 只是读取方，所以**不再软依赖** `/help` 插件。
+![预览](preview.jpg)
 
-## 预览
+## 目录结构
 
-样张不再提交二进制图片，而是生成 **html2img 请求 JSON**（`{html, vue: true, data, …}`）
-与单独的 `data` JSON：
-
-```bash
-cargo run -p fuyubot-plugin-system --example render_card_system   # → target/qa/json/card-sample*.json + target/qa/data/card-sample*.json（5 份）
-cargo run -p fuyubot-plugin-system --example render_real   # → 带默认公网背景的 card-real.json
-```
-
-请求 JSON 交给装好 `fuyubot.html2img` 的宿主 / 调试环境即可出图；`target/qa/data/*.json`
-可以喂给本地模板校验器（编译 + 渲染，不依赖 html2img）：
-
-```bash
-cd target/vuecheck
-cargo run --quiet -- ../../crates/fuyubot-plugin-system/assets/card.html ../qa/data/card-sample.json ../qa/html/card-sample.html
-# OK 30446 bytes
-```
-
-模板在 `assets/card.html`：`<style>` 是 reset + UnoCSS 预生成的工具类
-（`target/unocss-gen/out/system.css`），后面是 Vue 模板正文。改了类名要重新生成 CSS：
-
-```bash
-cd target/unocss-gen && node gen.mjs E:/Fuyu_TDBot/plugins/system/system.vue
-```
-
-## 功能
-
-- `/system` 一条命令出一张 1400×800 的信息卡片：
-  - 机器人头像、名字、`@username`、ID；
-  - 管理员（`[plugin.system] super_admin`）头像、名字、`@username`、ID 与留言提示；
-  - TDLib 版本与 commit hash（`getOption`）；
-  - CPU / RAM 使用率进度条（`sysinfo`，CPU 两次采样；SWAP 按需求去掉）；
-  - 磁盘占用（Windows 盘符「磁盘C」；Linux 是「根目录」/挂载点、macOS 是卷名、
-    Android 是「内部存储」/「外部存储」；已用 / 总量、百分比，最多 4 块）；
-  - 宿主进程里已加载的插件胶囊（名字 + 运行状态），按 `flex-wrap` 在面板里自动换行，
-    最多画 12 枚、超出的折成 `+N`，底部显示「共 N 个插件」；
-- 所有外部依赖失败都**降级不炸**：TDLib 查询失败显示「未知」，头像拿不到画渐变占位，
-  背景 URL 不是公网地址 / 拉取失败时只留渐变，插件清单读不到显示「暂无数据」。
-- html2img 的渲染产物在发送完成后自动删除；采集、渲染都在独立业务线程里跑，不阻塞 TDLib。
-
-## 与 `/help` 的联动
-
-命令表的**主人是宿主**：插件在 `start()` 里通过宿主预置的服务
-`fuyubot.host.commands` 的 `register` 方法登记 `/system`，条目带
-`role` / `scopes` / `hidden`（本插件 `/system` 没有权限判断，登记为
-`role = "user"`、`scopes = ["private", "group"]`、`hidden = false`）。
-图片版 `/help` 只是这张表的读取方（`list`），按宿主的判定分组渲染。
-
-`/system` 的回复也走宿主的命令回复服务 `fuyubot.host.command`：发新消息 +
-`reply_to`、编辑原命令消息还是发 ephemeral 都由宿主决定，插件不自己拼
-`sendMessage` / `reply_to`。登记失败（例如跨插件同名）只记一条 warn，
-不影响 `/system` 本身；**不再**用 `soft_inject` 声明 `/help`——宿主服务启动时就在。
-
-## 使用
+源码 crate：
 
 ```text
-/system
+crates/fuyubot-plugin-system/
+├─ plugin.json                 # native / ABI 6 / entry = bin/system.dll
+├─ Cargo.toml                  # cdylib（宿主加载）+ rlib（测试 / examples）
+├─ config.default.toml         # 最低优先级默认配置（随包发布）
+├─ README.md
+├─ preview.jpg                 # README 预览图，不打进 bundle
+├─ assets/card.html            # 卡片界面：<style> + Vue 模板，编译期嵌入
+├─ examples/                   # 生成 html2img 请求 JSON 的样张工具
+├─ testdata/                   # 离线回放配置与 updateNewMessage 样例
+└─ src/
+   ├─ lib.rs                   # Plugin 实现、订阅 updateNewMessage、启停
+   ├─ help.rs                  # 把 /system 登记进宿主命令表
+   ├─ host/                    # worker.rs、messenger.rs、command.rs、mod.rs
+   ├─ cmd/                     # parser.rs（前缀 / @机器人）、system.rs（业务）
+   ├─ core/                    # config.rs、sysinfo.rs、td.rs、model.rs
+   └─ render/                  # mod.rs、html2img.rs、avatar.rs、samples.rs
 ```
 
-命令前缀由 `[plugin.system] prefixes` 提供，缺省支持 `/`、`!`、`！`、`.` 和 `#`；
-也接受 `/system@机器人名` 这种 Telegram 群聊写法。
-
-## 处理流程
-
-1. 解析命令（不是 `/system` 就静默忽略，和其它插件共存）。
-2. `sysinfo` 采集系统信息：CPU 使用率隔 200ms 采两次，内存 / 磁盘一次（不采 SWAP）。
-3. TDLib `getOption("version")` / `getOption("commit_hash")`。
-4. `getMe` 取机器人资料与头像；配置了 `super_admin` 时再 `getUser` 管理员资料与头像。
-5. 头像优先读 TDLib 已下载的 `profile_photo.big.local.path`；没有就发
-   `downloadFile`（`priority` / `offset` / `limit` / `synchronous = true` 四个字段齐全），
-   由 TDLib **下载完再回响应**，直接拿 `local.path` 读图；失败再退 `small` 缩略图。
-   > 不能用「发 `downloadFile` 再等 `updateFile`」的写法：小头像往往在响应之前就下载完，
-   > 那条通知会漏掉（宿主自带的 `download_file` 操作也漏了 `priority` / `synchronous`，
-   > 实测会被 TDLib 直接拒绝）。
-6. `list_plugins()` 读宿主进程里的插件清单（名字 + active/pending/failed 状态）。
-7. 头像字节缩到 ≤192px、JPEG q80 后转 `data:` URI；背景只保留公网 `http(s)` URL；
-   卡片数据按模板契约映射成 `data`（`bot` / `admin` / `tblib` / `system` / `plugins` / `background`）。
-8. `host.call_service("fuyubot.html2img", "render", …)` 带上 `assets/card.html` 模板、
-   `vue: true` 与 `data`，渲染 1400×800 JPEG（`auto_height = false`、`scale = 1.0`、`format = "jpg"`）。
-9. 拿到本机 `path` → `send_photo`（有命令消息可回，走宿主的 `fuyubot.host.command`
-   回复通道）→ 删除该文件（NotFound 不算错误）。
-
-## 项目结构
-
-| 路径 | 说明 |
-| --- | --- |
-| `src/lib.rs` | 插件入口：实现 `Plugin`，建 worker、订阅 `updateNewMessage`、停机清理 |
-| `src/host/` | 宿主适配层：channel 路由线程、消息网关（命令回复走 `fuyubot.host.command`，主动推送走 simplify） |
-| `src/cmd/` | 命令层：文本命令解析、`/system` 业务流程 |
-| `src/core/` | 与宿主无关：配置、系统信息采集、TDLib 查询、数据模型 |
-| `assets/card.html` | 卡片界面：`<style>`（reset + UnoCSS 工具类）+ Vue 模板 |
-| `src/render/` | `view_data` 数据映射、头像 data URI、html2img 客户端、离线样张 |
-| `examples/` | 生成 html2img 请求 JSON 与 data JSON（`target/qa/json`、`target/qa/data`），调样式与验收用 |
-| `testdata/` | 离线回放用最小配置与 `/system` 更新样例 |
-| `plugin.json` | 插件元信息（native / ABI 6） |
-
-分层原则：`host` 只谈宿主通信，`cmd` 只谈命令，`core` 只谈数据，
-`render` 只谈数据映射与渲染服务调用；任一层都可以单独 `cargo test`。
-
-## 构建与部署
-
-在仓库根目录执行：
-
-```bash
-cargo build --release -p fuyubot-plugin-system
-```
-
-产物：`target/release/system.dll`（Linux `libsystem.so`，macOS `libsystem.dylib`）。
-部署时复制到宿主的插件目录：
+部署后的 bundle（zip 根就是插件目录内容）：
 
 ```text
-plugins/system/system.dll
+plugins/system/
+├─ plugin.json
+├─ config.default.toml
+└─ bin/system.dll              # Linux: libsystem.so；macOS: libsystem.dylib
 ```
 
-静态检查导出符号（不加载、不联网、不连 Telegram）：
+## 命令一览
 
-```bash
-./fuyubot-sdk.exe check target/release/system.dll
-```
+| 命令 | 权限 / 范围 | 作用 |
+| --- | --- | --- |
+| `/system` | 无权限判断（登记 `role=user`），私聊 / 群聊 | 采集系统信息、TDLib 资料与插件清单，出卡片并回复照片 |
 
-`Cargo.lock` 在仓库根目录统一维护，必须一起提交；不要跑 `cargo update`。
+命令名后的参数不会被读取；`/system@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀。命令前缀来自 `[plugin.system].prefixes`，未配置时跟随宿主 `[config].PREFIXES`。
 
-## 配置
+## 配置一览
 
-写在 `fuyubot.toml` 的 `[plugin.system]` 段，全部可选：
+配置段：`[plugin.system]`，字段全部可选。
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `super_admin` | 不配置 | 管理员 user id（正整数）；不配则卡片 admin 一栏显示「未配置」 |
+| `background_url` | 内置 B 站图 URL（见 `config.default.toml`） | 卡片背景公网 URL，由 html2img 拉取；写成空串则只用渐变 |
+| `timeout_ms` | `5000` | 单次 TDLib 调用超时（毫秒）；兼容旧写法 `timeout`（秒） |
+| `avatar_timeout_ms` | `20000` | 头像同步下载预算（毫秒）；兼容旧写法 `avatar_timeout`（秒） |
+| `prefixes` | `["/", "!", "！", ".", "#"]` | 命令前缀；不写则跟随宿主 `[config].PREFIXES` |
+
+兼容旧版大写键（`SUPER_ADMIN`、`BACKGROUND_URL`、`TIMEOUT_MS` 等）。
+
+## 使用说明
+
+**安装**
+
+- 插件商店直接安装；或
+- 源码目录：`fuyubot plugin install ./system`；或
+- 手动解压 zip 到宿主的 `plugins/system/` 后重启宿主。
+
+**最小配置**（`fuyubot.toml`）：
 
 ```toml
 [plugin.system]
-super_admin      = 123456789   # 超级管理员 user id；不配则 admin 一栏显示「未配置」
-background_url   = "https://i0.hdslb.com/bfs/article/cc4a3e435ac47a6190aebf4f74a8675b88a183bb.jpg"
-timeout_ms       = 5000        # 单次 TDLib 调用超时
-avatar_timeout_ms = 20000      # 头像同步下载的超时（弱网 / 大图给足时间）
-# prefixes       = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
+super_admin = 123456789
+timeout_ms = 5000
+avatar_timeout_ms = 20000
 ```
 
-`background_url = ""` 可以关掉背景图（纯渐变，离线环境推荐）。背景图**不再下载 / 缓存**：
-URL 写进模板 `data`，由 html2img 拉取；不是公网 `http(s)`（比如 `file://`、局域网地址）
-时直接丢弃，卡片只剩渐变——这是可接受的降级。
+`background_url` 写成空串可关掉背景图（纯渐变）；不写 `background_url` 或 `prefixes` 时，分别使用内置背景图与宿主前缀。
 
-旧写法的大写键（`SUPER_ADMIN`、`BACKGROUND_URL`、`TIMEOUT_MS` 等）同样接受；
-`background_cache` 已随下载逻辑一起删除，写了也不会生效。
+**典型用法**
 
-## 与 TS 版的差异
+```text
+/system                  # 出系统信息卡片
+！system                 # 换一个前缀
+/system@fengyezzz_bot    # 群聊点名调用
+```
 
-| | TS 版 | Rust 版 |
-|---|---|---|
-| 运行形态 | `plugins/system/index.ts`（Node 插件） | 单个 `system.dll`（宿主 dlopen） |
-| 模板 | `system.vue`（Vue 运行时 + `<script setup>`） | `assets/card.html`（`<style>` + Vue 模板，html2img 编译） |
-| 渲染 | `satoriVue` → SVG → `@resvg/resvg-js` → `sharp` | 宿主服务 `fuyubot.html2img`（HTML/CSS → JPEG） |
-| 图片 | `<img>` / 背景图直接交给 satori | 头像是 `data:` URI、背景是公网 URL，都由 html2img 加载 |
-| 字体 | 仓库内 Noto Sans SC + 系统回退 | 只用系统字体（html2img 不随插件带字体） |
-| 系统信息 | `systeminformation` | `sysinfo`（CPU / 内存 / 磁盘；不取 SWAP、OS、主板、网络） |
-| 管理员 | TS 版 `configs.admin.super_admin`（数据库） | `[plugin.system] super_admin`（宿主配置；Rust 宿主没有 admin 数据库段） |
-| 插件清单 | `pluginManager.getPlugins()`（含版本） | 宿主 `list_plugins`（只有名字 + 状态，ABI 没有版本字段） |
-| 失败策略 | 任意一步失败 → 整条命令回「获取系统信息失败」 | TDLib / 头像 / 背景各自降级，只有渲染失败才回错误 |
-| 命令注册 | `cmdHandlers` | 文本命令解析（`/system`，前缀见上文） |
-| 输出 | PNG（`quality: 1.5`） | JPEG 1400×800（`scale = 1.0`，Telegram 照片更省流量） |
-
-## 测试
+**构建与打包**
 
 ```bash
-cd crates/fuyubot-plugin-system
-cargo test                         # 单元测试
-cargo run -p fuyubot-plugin-system --example render_card_system    # 请求 JSON + data 写到 target/qa/{json,data}/
-cargo run -p fuyubot-plugin-system --example render_real    # 带默认公网背景的请求 JSON
+cargo build --release -p fuyubot-plugin-system
+python scripts/package.py --plugin system --platform windows-x86_64
 ```
 
-- 单元测试（`src/**`）：配置解析、系统信息格式、TDLib JSON 解析、命令解析。
-- 模板本身用 `target/vuecheck` 校验（编译 + 渲染，不依赖 html2img）：
-  `cargo run --quiet -- ../../crates/fuyubot-plugin-system/assets/card.html <data.json> <out.html>`。
-- 本地没有 html2img 渲染器，测试**不断言图片字节**；真实出图由宿主上的 html2img 插件验收。
+产出 `target/release/system.dll` 与 `system-0.1.4-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/system.dll`）。
 
-离线回放（不接 TDLib、不用账号，验证插件加载与 `/system` 命令链路）：
+**发布**
 
 ```bash
-cd <fuyubot 发行目录>
-./fuyubot.exe run --config fuyubot.toml \
-  --replay <本插件>/testdata/replay_system.json \
-  --plugin-dir plugins --replay-wait 30000
+git tag system-v0.1.4
+git push origin system-v0.1.4
 ```
 
-没有 TDLib 时日志会依次出现：系统信息采集完成 → getOption/getMe 超时降级 → 卡片已生成；
-图片发送与错误提示会因没有 TDLib 而失败（属预期，回放只验到「卡片已生成」）。
+tag 名固定为 `<id>-v<version>`；同一版本已打过 tag 时，先递增 `plugin.json` 的版本号再打新 tag。
 
-## 已知限制
+## 项目依赖（软/硬）
 
-- html2img 用 vue-template-html 编译模板：**不执行 JavaScript**，表达式只支持变量 /
-  成员访问 / 三元 / 四则与比较，没有函数调用、`Math` / `Date`、`?.` / `??`；
-  需要计算的值在 Rust 的 `view_data` 里先算好。
-- html2img **只加载公网 `http(s)` 与 `data:` 图片**（`file://`、相对路径、私网 / 回环
-  地址都会被拒绝）；背景 URL 不是公网地址时本插件直接不写这张图，只留渐变。
-- html2img 默认限制单次 HTML ≤ 128 KiB：头像已缩到 ≤192px（JPEG q80），整页通常
-  25–40 KiB（内置样张 8–30 KiB）；模板本身在发请求前会检查上限，超了直接报错。
-- 只认系统字体：中文依赖系统 CJK 字体（Windows 上是微软雅黑），观感与 TS 版的
-  Noto Sans SC 略有差别。
-- 磁盘按平台取标签：Windows 是盘符（「磁盘C」），Linux 是 `根目录` / 挂载点，
-  macOS 是 `系统磁盘` / 卷名，Android 是 `内部存储` / `外部存储`；伪文件系统
-  （proc / sysfs / tmpfs / 快照）与 Android 只读系统镜像不会占位，最多 4 块。
-- 插件胶囊没有版本号：宿主 `list_plugins` 只暴露名字与状态；模板沿用原 `version`
-  位置显示状态（运行 / 等待 / 失败）。
-- 插件胶囊最多画 12 枚（面板高度固定、不做坐标排版），超出的折成 `+N`；限额在
-  `view_data` 里做（`MAX_PLUGIN_CHIPS`），模板只负责显示 `plugin_overflow`。
+| 类型 | 服务名 | 说明 |
+| --- | --- | --- |
+| 硬依赖 | `fuyubot.html2img` | 调 `render` 出图；经 `Plugin::inject` 声明，未安装时插件停在 Pending |
+| 软依赖 | `fuyubot.host.commands` | 登记 `/system` 供 `/help` 展示；登记失败只记 warn |
+| 宿主内建（不算插件依赖） | `fuyubot.host.command` | 命令回复通道，发新消息 / 编辑原消息 / ephemeral 由宿主决定 |
+| 宿主内建（不算插件依赖） | TDLib `invoke`＋`response`、`list_plugins` | 取 TDLib 版本、机器人 / 管理员资料与插件清单 |
+| 外部条件 | 公网可达 | `background_url` 由 html2img 拉取，非公网 `http(s)` 时自动丢弃 |
 
-## 许可
-
-LGPL-3.0-or-later（与仓库内其它 Rust 插件一致）。
+宿主要求：支持 FuyuBot Native **ABI v6**。平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64。

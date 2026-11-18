@@ -1,6 +1,6 @@
 //! `fuyubot.host.command` 客户端：把「回复某条命令消息」交给宿主决定形态。
 //!
-//! ABI v6 契约（见仓库 `docs/abi-v6-spec.md` 第 4 条）：
+//! ABI v6 契约（见 FuyuBot 文档 · 插件开发 · 调用 TDLib 第 4 条）：
 //!
 //! - 服务名 `fuyubot.host.command`，方法 `reply`；
 //! - 入参 `{"chat_id":…,"message_id":…,"timeout_ms":…,"payload":{"input_message_content":…}}`；

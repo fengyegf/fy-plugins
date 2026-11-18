@@ -22,7 +22,7 @@
 //! （文件内容、用户传进来的 id / 字符串），索引越界也不可能发生（全用 map 的 get）。
 //!
 //! 落盘失败时**内存里的改动保留**：调用方拿到 `StoreError::Io` 只用于记日志，
-//! 不会让运行期状态回退（见 docs/bidibot-design.md 第八节「存储写失败」）。
+//! 不会让运行期状态回退（存储写失败时只丢弃本次写入）。
 
 use std::collections::BTreeMap;
 use std::fs;

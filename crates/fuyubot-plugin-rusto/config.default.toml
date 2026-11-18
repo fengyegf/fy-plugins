@@ -1,0 +1,10 @@
+# rusto 默认配置（随发布包分发，最低优先级；宿主 / 用户配置会覆盖这里）
+auto = false
+max_side = 960
+concurrency = 1
+rec_workers = 1
+model = "ppocrv6-tiny-int8"
+detail_default = false
+reply_placeholder = true
+chunk_size = 3800
+timeout_ms = 20000

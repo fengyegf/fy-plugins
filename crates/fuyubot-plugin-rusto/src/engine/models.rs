@@ -16,7 +16,7 @@
 //! `./data/plugins/rusto/models` → `./models` → rusto 自身缓存目录。
 //!
 //! 格式取舍：.mnn 优先。两种格式都由 `rusto-nn` 的纯 Rust 解析器读，
-//! 不需要打开 `rten` feature；同图基准见 `docs/research/rusto-rs.md` §10.2。
+//! 不需要打开 `rten` feature；性能基准与选型记录见提交历史。
 //!
 //! 下载：rusto 的下载器只认进程级环境变量 `RUSTO_MODELS_URL` 做前缀替换
 //! （`{值}/{asset_filename}`），且内置「文件名 → HF 路径」映射只覆盖 .rten，

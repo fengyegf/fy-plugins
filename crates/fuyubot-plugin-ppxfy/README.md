@@ -1,197 +1,115 @@
-# FuyuBot PPXFY
+# PPXFY（DMM / DLSite 下载与分享）
 
-FuyuBot 的下载与 Galgame 信息插件。它支持多链接下载、压缩包解压、目录浏览与
-分卷打包，也可以把 DMM / DLSite 作品整理成分享消息和 Telegraph 预览页。
+`ppxfy` · v0.1.5 · ABI v6 · Windows x86_64 / Linux x86_64 / macOS aarch64
 
-## 功能
+## 项目介绍
 
-- `/d`：交互式接收多个下载链接，并发下载、解压、浏览目录并打包上传。
-- `/p`：解析 DMM / DLSite 作品页，补充信息并生成分享消息。
-- `/cancel`：取消当前聊天的活跃任务并清理下载缓存。
-- `/clearcache`：清理没有任务登记的残留缓存。
-- 可选接入 `mongo-plugin`，把 Galgame 作品记录写入 `storage.mongo`。
-- 支持 ZIP、RAR、7z 等常见压缩格式，7z 不可用时回退到内置 ZIP 处理。
-- 支持乱码文件名修复与超大压缩包分卷。
+PPXFY 是 FuyuBot 的下载与 Galgame 信息插件：把聊天里给出的下载链接变成可直接取用的分卷压缩包，把 DMM / DLSite 作品页整理成带预览的分享消息。
 
-## 与 `/help` 的联动
+- `/d`：逐条收集链接（回复 `OK` 开始）→ 并发下载 → 自动解压（必要时询问密码）→ 目录树删减 → 按体积分卷打包 → 上传。
+- `/p`：抓取作品页 → 解析封面 / 图集 / 购买链接 → 生成 Telegraph 预览页 → 逐项回复核对 → 可选写入 `storage.mongo` → 发送分享消息。
 
-命令表的主人是**宿主**：插件在 `start()` 里调 `fuyubot.host.commands` 的 `register`，
-把 `/download`、`/galgame`、`/cancel`、`/clearcache` 四条命令登记进宿主命令表。
-登记项带 `role` / `scopes` / `hidden` 三个能力字段：四条命令都没有权限判断，所以
-统一是 `role = "user"`、`scopes = ["private", "group"]`、`hidden = false`（与代码里
-实际的权限判断一致，登记不改变执行权限）。图片版 `/help` 只是这张表的读取方
-（`list`），按角色与会话过滤后渲染，用户发 `/help` 就能看到这些命令
-（别名 `/d`、`/p` 写在说明里）。
-
-命令回复也走宿主：`/d`、`/p`、`/cancel`、`/clearcache` 的回复调
-`fuyubot.host.command` 的 `reply`，由宿主决定是发新消息（并自己带 `reply_to`）、
-编辑原命令消息还是发 ephemeral，插件不再自己拼 `reply_to` 与 `sendMessage`。
-分卷上传（document）与相册属于流程产物、没有命令消息可回，仍然走 simplify 的
-`sendMessage` / `sendMessageAlbum`。
-
-命令表由宿主在启动时预置，不是某个插件提供的服务，所以 `soft_inject` 里只剩可选的
-`storage.mongo`（入库能力）：没装 mongo-plugin 照常跑，登记失败也只记一条 warn，
-不影响插件本身。服务名、方法名与 JSON 协议见插件文档的
-[「插件联动」](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage/)。
-
-## 命令
-
-### 下载
+## 目录结构
 
 ```text
-/d
-/download
-/downloadcommand
+crates/fuyubot-plugin-ppxfy/
+  Cargo.toml
+  plugin.json
+  config.default.toml
+  README.md
+  src/
+    lib.rs            入口、生命周期与软依赖声明
+    help.rs           向宿主命令表登记 /download /galgame /cancel /clearcache
+    cmd/              命令层：download / galgame / cancel / clearcache / parser
+    core/             配置、HTTP、压缩包识别、页面抓取、目录树
+    db/               storage.mongo 客户端与作品记录模型
+    galgame/          DMM / DLSite 页面解析与分享文本
+    host/             消息、命令回复、任务、进度、回复等待、线程调度
+    package/          分卷打包与上传准备
+    telegraph/        Telegraph 页面生成
+    unpack/           解压、密码交互、文件名修复入口
+    util/             文件操作、乱码修复、7z 调用
 ```
 
-发送命令后按提示回复下载链接，可以逐条添加多个链接，回复 `OK` 开始处理。插件会：
-
-1. 并发下载所有链接并显示多行进度。
-2. 选择可用的压缩包。
-3. 自动尝试无密码解压，必要时询问密码。
-4. 展示目录树，删除不需要的内容。
-5. 选择目录打包，并按大小自动分卷。
-6. 上传生成的压缩包。
-
-### Galgame
+部署后（ZIP 根 = 插件目录内容）：
 
 ```text
-/p <作品页链接>
-/galgame <作品页链接>
-/galgamecommand <作品页链接>
+plugins/ppxfy/
+  plugin.json
+  bin/ppxfy.dll          # Linux: libppxfy.so / macOS: libppxfy.dylib
+  config.default.toml
 ```
 
-插件会读取作品信息、封面、图集和购买链接，必要时通过回复补充信息，然后发送作品
-消息。配置 Telegraph token 后还会创建预览页。
+## 命令一览
 
-### 任务与缓存
+| 命令 | 权限 / 范围 | 作用 |
+| --- | --- | --- |
+| `/d` / `/download` / `/downloadcommand` | 所有用户 · 私聊 / 群组 | 交互式下载：逐条回复链接，`OK` 开始；并发下载 → 解压 → 目录树 → 分卷打包上传 |
+| `/p` / `/galgame` / `/galgamecommand` `<链接>` | 所有用户 · 私聊 / 群组 | 解析 DMM / DLSite 作品页，核对信息后发送分享消息，并按配置入库 |
+| `/cancel` | 所有用户 · 私聊 / 群组 | 取消当前聊天的活跃任务，并清理本次流程的临时文件 |
+| `/clearcache` | 所有用户 · 私聊 / 群组 | 清理没有任务登记的残留缓存（`Output/`、`ZipOutput/` 与缓存根目录文件） |
 
-```text
-/cancel
-/clearcache
-```
+命令名不区分大小写，历史长名 `downloadcommand`、`galgamecommand` 仍可用。前缀来自宿主顶层 `[config].PREFIXES`（默认 `/`、`!`、`！`、`.`、`#`），本插件没有自己的 `prefixes` 配置项。
 
-`/cancel` 会结束当前聊天的等待步骤并清理任务产物；`/clearcache` 用于清理异常退出
-后遗留的 `Output/`、`ZipOutput/` 和缓存根目录文件。
+## 配置一览
 
-命令前缀由宿主顶层 `[config] PREFIXES` 提供，默认支持 `/`、`!`、`！`、`.` 和 `#`。
+配置段 `[plugin.ppxfy]`，键名同时接受 snake_case 与全大写写法。
 
-## 配置
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `cache_dir` | `cache` | 下载 / 解压 / 打包的工作目录（相对运行目录，其下固定 `Output/`、`ZipOutput/`） |
+| `listen_timeout_ms` | `600000` | 等待用户回复（链接 / 密码 / 编号 / 包名）的超时 |
+| `unzip_timeout_ms` | `1800000` | 7z 兜底解压的超时 |
+| `archive_size_threshold_mb` | `1843.2` | 压缩包体积提示阈值，只记日志、不改变流程 |
+| `download_concurrency` | `4` | 并发下载数，限制在 1–16 |
+| `split_threshold_mb` | `1900` | 打包分卷阈值（MB） |
+| `seven_zip` | `7z` | 7z 可执行文件名或绝对路径 |
+| `fix_encoding` | `true` | 解压后自动修复 Shift-JIS / GBK 乱码文件名 |
+| `telegraph_token` | 空 | Telegraph 账号 token；留空不生成预览页 |
+| `telegraph_author` | `@ppxfy - Galgame` | 预览页作者名 |
+| `telegraph_author_url` | `https://t.me/ppxfy` | 预览页作者链接 |
+| `dlsite_proxy` | 空（直连） | DLSite 请求代理，不写 = 直连 |
+| `mongo_collection` | `ppxfy_galgame` | 作品记录集合（经 `storage.mongo` 读写） |
+| `mongodb_db` | 空（用服务端库） | 覆盖 mongo-plugin 的默认库名，不写 = 用服务端配置 |
 
-配置位于 `fuyubot.toml` 的 `[plugin.ppxfy]` 段：
+凭据类字段（`telegraph_token` / `dlsite_proxy`）取值优先级：配置段 > 环境变量（`PPXFY_TELEGRAPH_TOKEN`、`PPXFY_DLSITE_PROXY`）> 运行目录或 `plugins/ppxfy/.env`。
+
+## 使用说明
+
+**安装**：从插件商店安装；或 `fuyubot plugin install ./ppxfy`；或把发布包解压到 `plugins/ppxfy/` 后重启宿主。
+
+最小配置：
 
 ```toml
 [plugin.ppxfy]
 cache_dir = "cache"
 listen_timeout_ms = 600000
-unzip_timeout_ms = 1800000
-archive_size_threshold_mb = 1843.2
 download_concurrency = 4
 split_threshold_mb = 1900
-seven_zip = "7z"
-fix_encoding = true
-telegraph_token = ""
-telegraph_author = "@ppxfy - Galgame"
-telegraph_author_url = "https://t.me/ppxfy"
-dlsite_proxy = ""
-mongo_collection = "ppxfy_galgame"
-mongodb_db = ""
+seven_zip = "7z"                 # 解压 RAR / 7z 需要系统安装 7z
+telegraph_token = ""             # 要 Telegraph 预览页再填
 ```
 
-常用字段：
+**典型用法**：
 
-| 字段 | 默认值 | 说明 |
-| --- | --- | --- |
-| `cache_dir` | `cache` | 下载、解压和打包的工作目录 |
-| `listen_timeout_ms` | `600000` | 等待用户回复的超时 |
-| `unzip_timeout_ms` | `1800000` | 7z 解压超时 |
-| `archive_size_threshold_mb` | `1843.2` | 压缩包大小提示阈值 |
-| `download_concurrency` | `4` | 同时下载的文件数，限制为 1 到 16 |
-| `split_threshold_mb` | `1900` | 打包分卷阈值 |
-| `seven_zip` | `7z` | 7z 可执行文件名称或绝对路径 |
-| `fix_encoding` | `true` | 修复 Shift-JIS / GBK 文件名乱码 |
-| `telegraph_token` | 空 | Telegraph 账号 token |
-| `dlsite_proxy` | 空 | DLSite 请求代理 |
-| `mongo_collection` | `ppxfy_galgame` | Galgame 记录集合 |
-| `mongodb_db` | 空 | 覆盖 mongo-plugin 默认库 |
+1. 发送 `/d`，按提示逐条回复下载链接，最后回复 `OK` 开始；流程中可按编号删减目录，`/cancel` 随时中断。
+2. 发送 `/p <作品页链接>` 解析 DMM / DLSite 作品，按提示补充信息后发出分享消息。
+3. 异常退出后若残留文件，发送 `/clearcache` 清理。
 
-### 凭据
+**构建与打包**：
 
-凭据优先从 `[plugin.ppxfy]` 读取，其次读取环境变量，最后读取工作目录或
-`plugins/ppxfy/.env`：
-
-```dotenv
-PPXFY_TELEGRAPH_TOKEN=
-PPXFY_DLSITE_PROXY=
-```
-
-可以复制 `.env.example` 为 `.env` 后填写。`.env` 已被忽略，不要提交真实凭据。
-
-### MongoDB
-
-Galgame 记录通过 `storage.mongo` 服务写入，连接串和默认库由 `mongo-plugin` 管理：
-
-```toml
-[plugin.mongo-plugin]
-uri = "mongodb://127.0.0.1:27017"
-db = "ppxfy"
-```
-
-没有安装或启动 `mongo-plugin` 时，下载和 Galgame 分享仍可正常使用，只是不入库。
-
-## 依赖
-
-- Rust 1.93 或更高版本。
-- 处理 RAR、7z 等格式时需要系统安装 `7z`，或在配置中指定路径。
-- Galgame 预览页需要 Telegraph token。
-- 数据库记录需要 `mongo-plugin`，属于软依赖。
-
-## 构建
-
-在仓库根目录执行：
-
-```powershell
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
+```bash
 cargo build --release -p fuyubot-plugin-ppxfy
+python scripts/package.py --plugin ppxfy --platform windows-x86_64
 ```
 
-Windows 产物：`target/release/ppxfy.dll`（Linux `libppxfy.so`，macOS
-`libppxfy.dylib`）。
+**发布**：`git tag ppxfy-v0.1.5 && git push origin ppxfy-v0.1.5`。
 
-检查插件导出符号与 ABI：
+## 项目依赖（软/硬）
 
-```powershell
-./fuyubot-sdk.exe check target\release\ppxfy.dll
-```
-
-依赖中的 `zip` 使用仓库根目录的 [vendor/zip](../../vendor/zip) 本地补丁，修复
-Windows 下日文文件名触发的路径切片 panic。`Cargo.lock` 统一在仓库根目录维护，不要
-随意执行 `cargo update`。
-
-## 安装
-
-将构建产物复制到宿主的插件目录：
-
-```powershell
-Copy-Item target\release\ppxfy.dll <FuyuBot目录>\plugins\ppxfy\
-```
-
-重启宿主后确认 `ppxfy` 已加载。需要 7z 或 mongo-plugin 时，同时确认对应程序和插件
-已安装。
-
-## 项目结构
-
-```text
-src/
-  lib.rs            插件入口、生命周期与依赖声明
-  cmd/              下载、Galgame、取消、缓存清理与命令解析
-  core/             配置、HTTP、压缩包、页面与目录树处理
-  db/               storage.mongo 客户端与 Galgame 记录模型
-  galgame/          DMM / DLSite 页面解析与分享文本
-  host/             消息、命令回复、任务、进度、回复等待与线程调度
-  package/          分卷压缩与上传准备
-  telegraph/        Telegraph 页面生成
-  unpack/           解压、密码交互与文件名修复入口
-  util/             文件、文件名修复与 7z 调用
-```
+| 类型 | 名称 | 说明 |
+| --- | --- | --- |
+| 硬依赖 | 无 | 不装任何插件即可运行；`fuyubot.host.commands`、`fuyubot.host.command` 属宿主内建服务，不算插件依赖 |
+| 软依赖 | `storage.mongo` | 由 mongo-plugin 提供；未安装时 `/p` 照常分享，只是不入库 |
+| 系统 | `7z` | 解压 RAR / 7z 需要；只有 ZIP 时用内置解压兜底 |
+| 宿主 | ABI v6 | 低于 v6 的宿主无法加载本插件 |

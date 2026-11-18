@@ -4,7 +4,7 @@
   "name": "KFC",
   "version": "0.1.5",
   "kind": "native",
-  "entry": "kfc.dll",
+  "entry": "bin/kfc.dll",
   "abi": 6,
   "platforms": [
     "windows-x86_64",
@@ -13,5 +13,10 @@
     "android-aarch64",
     "android-x86_64"
   ],
-  "description": "抓一句肯德基疯话，渲染成推特卡片发回去。"
+  "depends": [
+    "fuyubot.html2img"
+  ],
+  "description": "抓一句肯德基疯话，渲染成推特卡片发回去。",
+  "homepage": "https://github.com/fengyegf/fy-plugins/tree/main/crates/fuyubot-plugin-kfc",
+  "config": "config.default.toml"
 }

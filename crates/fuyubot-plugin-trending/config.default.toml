@@ -1,0 +1,8 @@
+# fuyubot-plugin-trending 默认配置：最低优先级，宿主会与 [plugin.trending] 段合并
+trending_url = "https://github.com/trending"
+width = 1600
+timeout_ms = 15000
+max_items = 15
+avatar = true
+avatar_timeout_ms = 6000
+prefixes = ["/", "!", "！", ".", "#"]
