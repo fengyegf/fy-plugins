@@ -30,6 +30,8 @@ jobs:
           - { plugin: ppxfy, platform: macos-aarch64, os: macos-15 }
           - { plugin: system, platform: linux-x86_64, os: ubuntu-latest }
           - { plugin: system, platform: macos-aarch64, os: macos-15 }
+          - { plugin: rusto, platform: linux-x86_64, os: ubuntu-latest }
+          - { plugin: rusto, platform: macos-aarch64, os: macos-15 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
