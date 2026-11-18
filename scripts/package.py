@@ -211,6 +211,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # Windows 的 CI 控制台默认是 cp1252，直接 print 中文会 UnicodeEncodeError
+    # （本地 GBK 控制台只是显示成乱码，不会中断）。统一把标准输出 / 错误切到 UTF-8。
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+
     crate, manifest, cargo_version, library_name = load_plugin(args.plugin)
     version = normalize_version(args.version) if args.version else cargo_version
     if version != cargo_version:
