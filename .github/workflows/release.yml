@@ -18,7 +18,7 @@ on:
         description: "插件 id（crates/fuyubot-plugin-<id>）"
         required: true
         type: choice
-        options: [whois, musiccard, epic, kfc, ppxfy, system, trending, rusto]
+        options: [whois, musiccard, epic, kfc, ppxfy, system, trending, bidibot, rusto]
       version:
         description: "semver，不带 v（例如 0.1.2）"
         required: true
