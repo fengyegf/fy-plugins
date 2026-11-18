@@ -29,7 +29,7 @@ from package import PLATFORMS, load_plugin, normalize_version  # noqa: E402
 RUNNERS = {
     "windows-x86_64": ("windows-latest", "", ""),
     "linux-x86_64": ("ubuntu-latest", "", ""),
-    "macos-aarch64": ("macos-14", "", ""),
+    "macos-aarch64": ("macos-15", "", ""),
     "android-aarch64": ("ubuntu-latest", "aarch64-linux-android", "arm64-v8a"),
     "android-x86_64": ("ubuntu-latest", "x86_64-linux-android", "x86_64"),
 }
