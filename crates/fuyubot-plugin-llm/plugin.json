@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "fengyegf.llm",
+  "name": "LLM Gateway",
+  "version": "0.1.0",
+  "kind": "native",
+  "entry": "bin/llm.dll",
+  "abi": 6,
+  "platforms": [
+    "windows-x86_64",
+    "linux-x86_64",
+    "macos-aarch64",
+    "android-aarch64",
+    "android-x86_64"
+  ],
+  "provides": [
+    "fengyegf.llm"
+  ],
+  "description": "面向 AI Agent 的大模型协议网关：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages，零 AI SDK 依赖，自实现 HTTP/SSE。",
+  "homepage": "https://github.com/fengyegf/fy-plugins/tree/main/crates/fuyubot-plugin-llm",
+  "config": "config.default.toml"
+}

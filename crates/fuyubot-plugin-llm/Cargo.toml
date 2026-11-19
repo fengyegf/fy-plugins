@@ -1,0 +1,20 @@
+[package]
+name = "fuyubot-plugin-llm"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "LLM 协议网关：OpenAI Chat Completions / OpenAI Responses / Anthropic Messages"
+license = "MIT"
+
+[lib]
+# 宿主 dlopen 的插件动态库；rlib 供其它 Rust 代码（内部调用）直接依赖。
+name = "llm"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fuyubot-plugin-api.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+# 阻塞式 HTTP：协议调用在插件自己的线程 / 工具处理器里同步完成，不需要 async runtime。
+ureq.workspace = true

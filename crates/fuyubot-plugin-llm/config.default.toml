@@ -1,0 +1,41 @@
+# fengyegf.llm 的默认配置（最低优先级）。
+# 用户在自己的 fuyubot.toml 的 [plugin.fengyegf.llm] 段里覆盖这些键。
+# 注意：api_key 不要提交到仓库，请在部署现场填写。
+
+# 兼容 OpenAI 协议的服务根地址（不带 /chat/completions 等后缀）。
+# 支持 http:// 与 https://（TLS 走 ureq 默认的 rustls + webpki-roots，无额外依赖）。
+# 例：https://api.deepseek.com、https://api.openai.com/v1、https://api.anthropic.com/v1
+base_url = "https://api.deepseek.com"
+api_key = ""
+
+# OpenAI 兼容网关的可选身份头。
+organization = ""
+project = ""
+
+# Anthropic Messages 的版本头。
+anthropic_version = "2023-06-01"
+anthropic_beta = ""
+
+# HTTP 行为。
+timeout_secs = 120
+connect_timeout_secs = 15
+read_timeout_secs = 300
+max_retries = 2
+
+# 三个协议的路径；一般不用改。
+# 也可以写绝对 URL（以 http:// 或 https:// 开头）把某个协议单独指向别的厂商。
+chat_completions_path = "/chat/completions"
+responses_path = "/responses"
+messages_path = "/messages"
+models_path = "/models"
+
+# 追加到每个请求的自定义头，例如 { "X-Tenant" = "demo" }。
+[headers]
+
+# 插件层默认值（工具/服务在请求没带 model、max_tokens 时使用）。
+default_model = "deepseek-chat"
+default_max_tokens = 1024
+
+# 是否注册工具与共享服务（供宿主 / AI / 其它插件调用）。
+enable_tools = true
+enable_service = true

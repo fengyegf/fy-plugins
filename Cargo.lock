@@ -789,6 +789,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fuyubot-plugin-llm"
+version = "0.1.0"
+dependencies = [
+ "fuyubot-plugin-api",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "ureq",
+]
+
+[[package]]
 name = "fuyubot-plugin-musiccard"
 version = "0.1.5"
 dependencies = [
