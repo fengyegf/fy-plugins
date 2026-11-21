@@ -3,7 +3,7 @@
 # 同时产出 cdylib（宿主 dlopen 的插件动态库）与 rlib（cargo test / examples 可用）。
 [package]
 name = "fuyubot-plugin-trending"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
 description = "抓取 GitHub Trending 今日 / 本周 / 本月榜单，渲染成 4 列卡片墙并以图片回复"

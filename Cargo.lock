@@ -770,7 +770,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-epic"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "fuyubot-plugin-api",
  "serde_json",
@@ -780,7 +780,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-kfc"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "fuyubot-plugin-api",
  "serde_json",
@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-musiccard"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "chrono",
  "fuyubot-plugin-api",
@@ -846,7 +846,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-system"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "base64 0.22.1",
  "fuyubot-plugin-api",
@@ -858,7 +858,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-trending"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "fuyubot-plugin-api",
@@ -870,7 +870,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-whois"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "base64 0.22.1",
  "fuyubot-plugin-api",

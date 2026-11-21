@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "fengyegf.system",
   "name": "System",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "kind": "native",
   "entry": "bin/system.dll",
   "abi": 6,

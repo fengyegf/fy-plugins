@@ -1,6 +1,6 @@
 # MusicCard
 
-插件 id `fengyegf.musiccard` · 版本 `0.1.5` · ABI v6 · 平台 windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id `fengyegf.musiccard` · 版本 `0.1.6` · ABI v6 · 平台 windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -95,8 +95,8 @@ python scripts/package.py --plugin musiccard --platform windows-x86_64
 **发布**：
 
 ```bash
-git tag fengyegf.musiccard-v0.1.5
-git push origin fengyegf.musiccard-v0.1.5
+git tag fengyegf.musiccard-v0.1.6
+git push origin fengyegf.musiccard-v0.1.6
 ```
 
 ## 项目依赖（软/硬）

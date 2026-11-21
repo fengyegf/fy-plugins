@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "fengyegf.trending",
   "name": "GitHub Trending",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "kind": "native",
   "entry": "bin/trending.dll",
   "abi": 6,

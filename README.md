@@ -52,12 +52,12 @@ plugins/<id>/
 
 | 插件 id | 名称 | 版本 | 平台 | 依赖 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| [`fengyegf.whois`](crates/fuyubot-plugin-whois/README.md) | Whois | 0.1.5 | 全平台 | html2img（硬） | 查询域名注册信息与 IP 归属，渲染成信息卡片 |
-| [`fengyegf.musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.5 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
-| [`fengyegf.epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.5 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
-| [`fengyegf.kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.6 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
-| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.5 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
-| [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.1 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
+| [`fengyegf.whois`](crates/fuyubot-plugin-whois/README.md) | Whois | 0.1.6 | 全平台 | html2img（硬） | 查询域名注册信息与 IP 归属，渲染成信息卡片 |
+| [`fengyegf.musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.6 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
+| [`fengyegf.epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.6 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
+| [`fengyegf.kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.7 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
+| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.6 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
+| [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.2 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
 | [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
 | [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.1 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
 | [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.2 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
@@ -120,7 +120,7 @@ x86_64-unknown-linux-gnu.2.28` 构建；`scripts/package.py` 打包前会用
 一个插件一个 tag，推 tag 触发 `.github/workflows/release.yml` 构建全部声明平台并挂到 Release：
 
 ```bash
-git tag fengyegf.whois-v0.1.5
+git tag fengyegf.whois-v0.1.6
 git push origin fengyegf.whois-v0.1.6
 ```
 
@@ -130,7 +130,7 @@ git push origin fengyegf.whois-v0.1.6
 确实是本仓库 CI 构建的：
 
 ```bash
-gh attestation verify dist/fengyegf.whois-0.1.5-windows-x86_64.zip --repo fengyegf/fy-plugins
+gh attestation verify dist/fengyegf.whois-0.1.6-windows-x86_64.zip --repo fengyegf/fy-plugins
 ```
 
 仓库已开启 **Release 不可变性**（Settings → Releases → Release immutability）：已发布

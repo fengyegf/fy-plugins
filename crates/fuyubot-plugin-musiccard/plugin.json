@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "fengyegf.musiccard",
   "name": "MusicCard",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "kind": "native",
   "entry": "bin/musiccard.dll",
   "abi": 6,

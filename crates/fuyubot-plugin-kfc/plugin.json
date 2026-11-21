@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "fengyegf.kfc",
   "name": "KFC",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "kind": "native",
   "entry": "bin/kfc.dll",
   "abi": 6,
