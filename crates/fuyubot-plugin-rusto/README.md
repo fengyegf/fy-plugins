@@ -1,6 +1,6 @@
 # RustO OCR
 
-fengyegf.rusto · v0.1.2 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+fengyegf.rusto · v0.1.3 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -110,7 +110,7 @@ python scripts/package.py --plugin rusto --platform linux-x86_64 \
   --target-triple x86_64-unknown-linux-gnu
 ```
 
-`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/fengyegf.rusto-0.1.2-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
+`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/fengyegf.rusto-0.1.3-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
 
 **Linux 的 glibc 基线**：动态库里的 `GLIBC_x.y` 符号版本由**构建机**决定，用太新的发行版构建，老机器上宿主 `dlopen` 会直接失败，而日志只有一句 `dlopen failed`：
 
@@ -123,8 +123,8 @@ python scripts/package.py --plugin rusto --platform linux-x86_64 \
 **发布**：
 
 ```bash
-git tag fengyegf.rusto-v0.1.2
-git push origin fengyegf.rusto-v0.1.2
+git tag fengyegf.rusto-v0.1.3
+git push origin fengyegf.rusto-v0.1.3
 ```
 
 ## 项目依赖（软/硬）

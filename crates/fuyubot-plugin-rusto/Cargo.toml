@@ -3,7 +3,7 @@
 # 一个 crate 两种库目标：cdylib 给宿主 dlopen，rlib 让 cargo test / examples 直接调内部模块。
 [package]
 name = "fuyubot-plugin-rusto"
-version = "0.1.2"
+version = "0.1.3"
 edition.workspace = true
 rust-version.workspace = true
 description = "RustO! 纯 Rust OCR：图片进、文本出，并作为 rusto.ocr 服务供其它插件联动"

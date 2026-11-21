@@ -60,7 +60,7 @@ plugins/<id>/
 | [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.2 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
 | [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
 | [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.1 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
-| [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.2 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
+| [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.3 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
 | [`fengyegf.llm`](crates/fuyubot-plugin-llm/README.md) | LLM Gateway | 0.1.0 | 全平台 | — | 零 AI SDK 的三大协议网关（OpenAI Chat / Responses / Anthropic Messages），提供工具与服务 |
 
 平台口径：全平台 = `windows-x86_64` / `linux-x86_64` / `macos-aarch64` / `android-aarch64` /
