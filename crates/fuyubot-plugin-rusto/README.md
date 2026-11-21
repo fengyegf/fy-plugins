@@ -1,6 +1,6 @@
 # RustO OCR
 
-fengyegf.rusto · v0.1.1 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+fengyegf.rusto · v0.1.2 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -102,15 +102,29 @@ model = "ppocrv6-tiny-int8"
 ```bash
 cargo build --release -p fuyubot-plugin-rusto
 python scripts/package.py --plugin rusto --platform windows-x86_64
+
+# Linux x86_64：用 cargo-zigbuild 把 glibc 基线钉在 2.28（见下）
+cargo zigbuild --release --locked -p fuyubot-plugin-rusto \
+  --target x86_64-unknown-linux-gnu.2.28
+python scripts/package.py --plugin rusto --platform linux-x86_64 \
+  --target-triple x86_64-unknown-linux-gnu
 ```
 
-`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/fengyegf.rusto-0.1.1-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
+`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/fengyegf.rusto-0.1.2-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
+
+**Linux 的 glibc 基线**：动态库里的 `GLIBC_x.y` 符号版本由**构建机**决定，用太新的发行版构建，老机器上宿主 `dlopen` 会直接失败，而日志只有一句 `dlopen failed`：
+
+```text
+/lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.43' not found (required by librusto.so)
+```
+
+所以 Linux x86_64 发布包统一用 `cargo zigbuild --target x86_64-unknown-linux-gnu.2.28` 构建（glibc ≥ 2.28 都能加载），`scripts/package.py` 打包前会用 `scripts/check_glibc.py` 静态检查，超过基线直接报错而不是发出一个只能在新系统上用的包。
 
 **发布**：
 
 ```bash
-git tag fengyegf.rusto-v0.1.1
-git push origin fengyegf.rusto-v0.1.1
+git tag fengyegf.rusto-v0.1.2
+git push origin fengyegf.rusto-v0.1.2
 ```
 
 ## 项目依赖（软/硬）

@@ -32,6 +32,10 @@ import zipfile
 from pathlib import Path
 from zipfile import ZipInfo
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from check_glibc import glibc_version, required_glibc  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # platform -> (动态库扩展名, 交叉编译 target triple)
@@ -42,6 +46,12 @@ PLATFORMS = {
     "android-aarch64": ("so", "aarch64-linux-android"),
     "android-x86_64": ("so", "x86_64-linux-android"),
 }
+
+# Linux x86_64 发布包的 glibc 基线。动态库里的 GLIBC_x.y 符号版本是**构建机**决定的：
+# 用太新的发行版构建，老机器上宿主 dlopen 会直接失败，而宿主日志只有一句：
+#   /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.43' not found (required by librusto.so)
+# 基线跟 release.yml 里 cargo-zigbuild 的目标 x86_64-unknown-linux-gnu.2.28 保持一致。
+MAX_GLIBC = "2.28"
 
 SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -251,6 +261,34 @@ def check_archive_size(path: Path) -> None:
         )
 
 
+def check_linux_glibc(library: Path, baseline: str) -> str:
+    """检查 linux 动态库要求的 glibc 不超过基线，返回实际最高版本（没有要求时返回空串）。
+
+    宿主 dlopen 失败时只报一句 `dlopen failed`，所以必须在打包阶段静态拦下来：
+    否则包能发出去，但只能在跟构建机一样新的发行版上加载。
+    """
+    try:
+        limit = glibc_version(baseline)
+    except ValueError as error:
+        raise SystemExit(f"--max-glibc 不是合法版本号：{error}") from error
+
+    versions = required_glibc(library.read_bytes())
+    if not versions:
+        return ""
+    newest = max(versions, key=glibc_version)
+    if glibc_version(newest) > limit:
+        raise SystemExit(
+            f"{library.name} 需要 {newest}，高于发布基线 glibc {baseline}：\n"
+            "  这种包在更老的发行版上 dlopen 会直接失败（version `GLIBC_x.y' not found），\n"
+            "  而宿主日志只会显示一句 dlopen failed。\n"
+            "  请在旧 glibc 环境里构建，例如：\n"
+            "    cargo zigbuild --release --locked -p <crate> \\\n"
+            "      --target x86_64-unknown-linux-gnu.2.28\n"
+            f"  确认目标机器 glibc 够新后可以显式放宽：--max-glibc {newest.removeprefix('GLIBC_')}"
+        )
+    return newest
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="打包一个 FuyuBot 原生插件 bundle")
     parser.add_argument("--plugin", required=True, help="插件 id，等于 plugin.json 的 id")
@@ -264,6 +302,16 @@ def main() -> int:
         default=[],
         metavar="PATH",
         help="追加打进 bundle 的资产（可重复），相对 crate 根；crate 根的 models/ 与 NOTICE.md 会自动带入",
+    )
+    parser.add_argument(
+        "--max-glibc",
+        default=MAX_GLIBC,
+        help=f"linux-x86_64 允许的最高 glibc（默认 {MAX_GLIBC}；确实需要时再放宽）",
+    )
+    parser.add_argument(
+        "--target-triple",
+        default=None,
+        help="cargo 的 target triple（默认按平台推断；cargo-zigbuild 构建时传 x86_64-unknown-linux-gnu）",
     )
     args = parser.parse_args()
 
@@ -293,12 +341,18 @@ def main() -> int:
     extension, triple = PLATFORMS[args.platform]
     library = library_file(library_name, extension)
     target_root = ROOT / args.target_dir
+    # 显式传了 --target-triple（cargo-zigbuild 会按 triple 分目录）就用它覆盖默认值；
+    # 传空串等于不覆盖，CI 里可以无脑透传。
+    triple = args.target_triple or triple
     release_dir = target_root / triple / "release" if triple else target_root / "release"
     library_path = release_dir / library
     if not library_path.is_file():
         raise SystemExit(f"找不到 {library_path}；请先执行 cargo build --release")
 
     entry = entry_for(manifest, library)
+    glibc_requirement = ""
+    if args.platform == "linux-x86_64":
+        glibc_requirement = check_linux_glibc(library_path, args.max_glibc)
 
     # 额外资产：plugin.json 的 config、crate 根的 models/ 与 NOTICE.md 自动带入
     # （存在才带），--assets 追加。ZIP 内路径都保持相对 crate 根的原样。
@@ -379,6 +433,8 @@ def main() -> int:
     digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
     size_mb = archive_path.stat().st_size / (1024 * 1024)
     print(f"[OK] {archive_path.relative_to(ROOT)} ({size_mb:.1f} MiB)")
+    if glibc_requirement:
+        print(f"     glibc 需求 {glibc_requirement}（基线 {args.max_glibc}）")
     if automatic:
         print(f"     自动带入 crate 根的 {'、'.join(automatic)}")
     if assets:

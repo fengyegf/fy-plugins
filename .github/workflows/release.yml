@@ -76,8 +76,24 @@ jobs:
       - name: Install cargo-ndk
         if: matrix.android_abi != ''
         run: cargo install cargo-ndk --locked
+      # Linux 的 .so 会被宿主 dlopen，而 GLIBC_x.y 符号版本是**构建机**决定的：
+      # ubuntu-latest 原生构建会链到 glibc 2.39+，老机器加载直接失败：
+      #   /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.43' not found
+      # 所以固定用 cargo-zigbuild 链到 glibc 2.28（Debian 10 / Ubuntu 20.04 / RHEL 8 起都能加载），
+      # 打包时 scripts/package.py 还会再静态检查一遍，超基线直接失败。
+      - name: Install zig + cargo-zigbuild
+        if: matrix.platform == 'linux-x86_64'
+        run: |
+          python3 -m pip install --user --break-system-packages ziglang cargo-zigbuild
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build (Linux x86_64, glibc 2.28)
+        if: matrix.platform == 'linux-x86_64'
+        run: >-
+          cargo zigbuild --release --locked
+          -p "fuyubot-plugin-${{ needs.meta.outputs.id }}"
+          --target x86_64-unknown-linux-gnu.2.28
       - name: Build (native)
-        if: matrix.target == ''
+        if: matrix.target == '' && matrix.platform != 'linux-x86_64'
         run: cargo build --release --locked -p "fuyubot-plugin-${{ needs.meta.outputs.id }}"
       - name: Build (Android)
         if: matrix.android_abi != ''
@@ -86,6 +102,9 @@ jobs:
           build --release --locked -p "fuyubot-plugin-${{ needs.meta.outputs.id }}"
       - name: Package bundle
         shell: bash
+        env:
+          # linux 用 zigbuild 的 triple 目录；其它平台留空，package.py 按平台自己推断。
+          TARGET_TRIPLE: ${{ matrix.platform == 'linux-x86_64' && 'x86_64-unknown-linux-gnu' || '' }}
         # macOS / Linux 镜像只有 python3，Windows 镜像的可执行名是 python。
         run: >-
           ${{ runner.os == 'Windows' && 'python' || 'python3' }}
@@ -93,6 +112,7 @@ jobs:
           --plugin "${{ needs.meta.outputs.id }}"
           --platform "${{ matrix.platform }}"
           --version "${{ needs.meta.outputs.version }}"
+          --target-triple "$TARGET_TRIPLE"
       # 为 bundle 生成构建来源证明：发布后可用
       #   gh attestation verify <zip> --repo <owner>/<repo>
       # 校验它是本仓库 CI 构建的；与仓库的 Release 不可变性配合使用。

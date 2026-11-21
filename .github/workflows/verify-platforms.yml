@@ -40,10 +40,29 @@ jobs:
       - name: Install OpenSSL headers
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq pkg-config libssl-dev
+      # 跟 release.yml 一致：Linux 的 .so 会被宿主 dlopen，GLIBC_x.y 符号版本由构建机决定。
+      # ubuntu-latest 原生构建会链到 glibc 2.39+，老机器加载直接失败；
+      # 固定用 cargo-zigbuild 链到 glibc 2.28，打包时 package.py 会再静态校验一遍。
+      - name: Install zig + cargo-zigbuild
+        if: matrix.platform == 'linux-x86_64'
+        run: |
+          python3 -m pip install --user --break-system-packages ziglang cargo-zigbuild
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build (Linux x86_64, glibc 2.28)
+        if: matrix.platform == 'linux-x86_64'
+        run: >-
+          cargo zigbuild --release --locked
+          -p "fuyubot-plugin-${{ matrix.plugin }}"
+          --target x86_64-unknown-linux-gnu.2.28
       - name: Build
+        if: matrix.platform != 'linux-x86_64'
         run: cargo build --release --locked -p "fuyubot-plugin-${{ matrix.plugin }}"
       - name: Package
+        env:
+          # linux 用 zigbuild 的 triple 目录；其它平台留空，package.py 按平台自己推断。
+          TARGET_TRIPLE: ${{ matrix.platform == 'linux-x86_64' && 'x86_64-unknown-linux-gnu' || '' }}
         run: >-
           python3 scripts/package.py
           --plugin "${{ matrix.plugin }}"
           --platform "${{ matrix.platform }}"
+          --target-triple "$TARGET_TRIPLE"

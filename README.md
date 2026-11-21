@@ -60,7 +60,7 @@ plugins/<id>/
 | [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.1 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
 | [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
 | [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.1 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
-| [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.1 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
+| [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.2 | 全平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
 | [`fengyegf.llm`](crates/fuyubot-plugin-llm/README.md) | LLM Gateway | 0.1.0 | 全平台 | — | 零 AI SDK 的三大协议网关（OpenAI Chat / Responses / Anthropic Messages），提供工具与服务 |
 
 平台口径：全平台 = `windows-x86_64` / `linux-x86_64` / `macos-aarch64` / `android-aarch64` /
@@ -101,6 +101,19 @@ python scripts/package.py --plugin whois --platform windows-x86_64
 产物在 `dist/<id>-<version>-<platform>.zip`。Android 需要先装 target、NDK 与 `cargo-ndk`，
 再用 `--platform android-aarch64` / `android-x86_64` 打包。打包脚本会校验 `plugin.json`、
 条目命名、符号链接、单包 50 MB / 解压 200 MB / 2000 文件上限。
+
+Linux x86_64 还有一条硬约束：动态库里的 `GLIBC_x.y` 符号版本由**构建机**决定，用太新的
+发行版构建会在老机器上 `dlopen` 失败，而宿主只报一句 `dlopen failed`，真实原因类似：
+
+```text
+/lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.43' not found (required by librusto.so)
+```
+
+所以 Linux x86_64 的发布基线是 **glibc 2.28**，CI 用 `cargo zigbuild --target
+x86_64-unknown-linux-gnu.2.28` 构建；`scripts/package.py` 打包前会用
+`scripts/check_glibc.py` 静态检查，超过基线直接失败。本地在 Ubuntu 24.04+ 上直接
+`cargo build` 出来的 `.so` 会被拦下（需要别的构建环境，或确认目标机器够新后加
+`--max-glibc 2.39` 放宽）。
 
 ### 发布
 
