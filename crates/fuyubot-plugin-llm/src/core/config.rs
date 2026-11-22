@@ -161,10 +161,10 @@ impl ClientConfig {
     /// - `FUYUBOT_LLM_MAX_RETRIES`
     pub fn from_env() -> Self {
         let mut config = Self::default();
-        if let Ok(value) = std::env::var("FUYUBOT_LLM_BASE_URL") {
-            if !value.trim().is_empty() {
-                config.base_url = value;
-            }
+        if let Ok(value) = std::env::var("FUYUBOT_LLM_BASE_URL")
+            && !value.trim().is_empty()
+        {
+            config.base_url = value;
         }
         if let Ok(value) = std::env::var("FUYUBOT_LLM_API_KEY") {
             config.api_key = value;
@@ -175,23 +175,23 @@ impl ClientConfig {
         if let Ok(value) = std::env::var("FUYUBOT_LLM_PROJECT") {
             config.project = value;
         }
-        if let Ok(value) = std::env::var("FUYUBOT_LLM_ANTHROPIC_VERSION") {
-            if !value.trim().is_empty() {
-                config.anthropic_version = value;
-            }
+        if let Ok(value) = std::env::var("FUYUBOT_LLM_ANTHROPIC_VERSION")
+            && !value.trim().is_empty()
+        {
+            config.anthropic_version = value;
         }
         if let Ok(value) = std::env::var("FUYUBOT_LLM_ANTHROPIC_BETA") {
             config.anthropic_beta = value;
         }
-        if let Ok(value) = std::env::var("FUYUBOT_LLM_TIMEOUT_SECS") {
-            if let Ok(secs) = value.parse::<u64>() {
-                config.timeout_secs = secs;
-            }
+        if let Ok(value) = std::env::var("FUYUBOT_LLM_TIMEOUT_SECS")
+            && let Ok(secs) = value.parse::<u64>()
+        {
+            config.timeout_secs = secs;
         }
-        if let Ok(value) = std::env::var("FUYUBOT_LLM_MAX_RETRIES") {
-            if let Ok(retries) = value.parse::<u32>() {
-                config.max_retries = retries;
-            }
+        if let Ok(value) = std::env::var("FUYUBOT_LLM_MAX_RETRIES")
+            && let Ok(retries) = value.parse::<u32>()
+        {
+            config.max_retries = retries;
         }
         config
     }

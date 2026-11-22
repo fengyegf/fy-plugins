@@ -624,10 +624,10 @@ impl ResponseOutputItem {
     pub fn text(&self) -> String {
         let mut text = String::new();
         for part in self.content.as_deref().unwrap_or(&[]) {
-            if part.part_type.as_deref() == Some("output_text") {
-                if let Some(value) = &part.text {
-                    text.push_str(value);
-                }
+            if part.part_type.as_deref() == Some("output_text")
+                && let Some(value) = &part.text
+            {
+                text.push_str(value);
             }
         }
         text

@@ -247,10 +247,10 @@ impl Aggregator {
 
 /// 把一块增量合并进累积消息。
 fn merge_delta(message: &mut ChatMessage, delta: &Delta) {
-    if message.role.is_empty() {
-        if let Some(role) = &delta.role {
-            message.role = role.clone();
-        }
+    if message.role.is_empty()
+        && let Some(role) = &delta.role
+    {
+        message.role = role.clone();
     }
     append_content(&mut message.content, &delta.content);
     append_text(&mut message.refusal, &delta.refusal);

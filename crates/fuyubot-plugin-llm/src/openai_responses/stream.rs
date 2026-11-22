@@ -629,10 +629,10 @@ impl Serialize for ResponseStreamEvent {
             Self::Error(event) => tagged("error", event),
             Self::Unknown(inner) => {
                 let mut data = inner.data.clone();
-                if let Value::Object(map) = &mut data {
-                    if !map.contains_key("type") {
-                        map.insert("type".to_owned(), Value::String(inner.event_type.clone()));
-                    }
+                if let Value::Object(map) = &mut data
+                    && !map.contains_key("type")
+                {
+                    map.insert("type".to_owned(), Value::String(inner.event_type.clone()));
                 }
                 data
             }
@@ -855,13 +855,11 @@ impl Accumulator {
                 }
             }
             ResponseStreamEvent::RefusalDone(event) => {
-                if let Some((Some(output), Some(content))) =
-                    Some((event.output_index, event.content_index))
+                if let (Some(output), Some(content)) = (event.output_index, event.content_index)
+                    && let Some(refusal) = &event.refusal
                 {
-                    if let Some(refusal) = &event.refusal {
-                        self.refusals
-                            .insert((output as usize, content as usize), refusal.clone());
-                    }
+                    self.refusals
+                        .insert((output as usize, content as usize), refusal.clone());
                 }
             }
             ResponseStreamEvent::FunctionCallArgumentsDelta(event) => {
@@ -956,31 +954,31 @@ impl Accumulator {
 
     fn build_output(&self, response: &ResponseObject) -> Vec<ResponseOutputItem> {
         let mut indexed: BTreeMap<usize, ResponseOutputItem> = self.items.clone();
-        if indexed.is_empty() {
-            if let Some(items) = &response.output {
-                for (index, item) in items.iter().enumerate() {
-                    indexed.insert(index, item.clone());
-                }
+        if indexed.is_empty()
+            && let Some(items) = &response.output
+        {
+            for (index, item) in items.iter().enumerate() {
+                indexed.insert(index, item.clone());
             }
         }
 
         let mut indices: BTreeSet<usize> = BTreeSet::new();
-        for (key, _) in &self.texts {
+        for key in self.texts.keys() {
             indices.insert(key.0);
         }
-        for (key, _) in &self.refusals {
+        for key in self.refusals.keys() {
             indices.insert(key.0);
         }
-        for (key, _) in &self.reasoning_texts {
+        for key in self.reasoning_texts.keys() {
             indices.insert(key.0);
         }
-        for (key, _) in &self.summary_texts {
+        for key in self.summary_texts.keys() {
             indices.insert(key.0);
         }
-        for (key, _) in &self.parts {
+        for key in self.parts.keys() {
             indices.insert(key.0);
         }
-        for (key, _) in &self.summary_parts {
+        for key in self.summary_parts.keys() {
             indices.insert(key.0);
         }
         for &index in self.arguments.keys() {

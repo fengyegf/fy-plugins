@@ -205,6 +205,9 @@ impl StreamErrorEvent {
 ///
 /// 反序列化按 `type` 字段分派；未知事件进 [`MessageStreamEvent::Unknown`]，
 /// 序列化时原样写回。
+// 事件枚举保持按值携带负载，匹配点最直观；每条 SSE 行只解析一次，
+// 为省几百字节把每个 variant 都盒子化不划算。
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum MessageStreamEvent {
     /// `message_start`。

@@ -374,10 +374,10 @@ fn extract_text(protocol: Protocol, value: &Value) -> Option<String> {
                 for item in items {
                     if let Some(parts) = item.get("content").and_then(Value::as_array) {
                         for part in parts {
-                            if part.get("type").and_then(Value::as_str) == Some("output_text") {
-                                if let Some(text) = part.get("text").and_then(Value::as_str) {
-                                    collected.push_str(text);
-                                }
+                            if part.get("type").and_then(Value::as_str) == Some("output_text")
+                                && let Some(text) = part.get("text").and_then(Value::as_str)
+                            {
+                                collected.push_str(text);
                             }
                         }
                     }
@@ -393,10 +393,10 @@ fn extract_text(protocol: Protocol, value: &Value) -> Option<String> {
             let mut collected = String::new();
             if let Some(blocks) = value.get("content").and_then(Value::as_array) {
                 for block in blocks {
-                    if block.get("type").and_then(Value::as_str) == Some("text") {
-                        if let Some(text) = block.get("text").and_then(Value::as_str) {
-                            collected.push_str(text);
-                        }
+                    if block.get("type").and_then(Value::as_str) == Some("text")
+                        && let Some(text) = block.get("text").and_then(Value::as_str)
+                    {
+                        collected.push_str(text);
                     }
                 }
             }

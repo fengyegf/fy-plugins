@@ -40,7 +40,7 @@ pub struct Transport {
 
 /// 传输层内部错误：区分「上游给了状态码」和「根本没连上」。
 enum SendFailure {
-    Status(u16, ureq::Response),
+    Status(u16, Box<ureq::Response>),
     Transport(String),
 }
 
@@ -106,7 +106,7 @@ impl Transport {
                 }
                 Err(SendFailure::Status(status, response)) => {
                     let retry_after = parse_retry_after(response.header("retry-after"));
-                    let text = response.into_string().unwrap_or_default();
+                    let text = (*response).into_string().unwrap_or_default();
                     let error = LlmError::api(status, &text);
                     if attempt < self.config.max_retries && error.is_retryable() {
                         attempt += 1;
@@ -177,7 +177,7 @@ impl Transport {
                 }
                 Err(SendFailure::Status(status, response)) => {
                     let retry_after = parse_retry_after(response.header("retry-after"));
-                    let text = response.into_string().unwrap_or_default();
+                    let text = (*response).into_string().unwrap_or_default();
                     let error = LlmError::api(status, &text);
                     if attempt < self.config.max_retries && error.is_retryable() {
                         attempt += 1;
@@ -242,7 +242,7 @@ impl Transport {
         };
 
         result.map_err(|error| match error {
-            UreqError::Status(status, response) => SendFailure::Status(status, response),
+            UreqError::Status(status, response) => SendFailure::Status(status, Box::new(response)),
             UreqError::Transport(error) => SendFailure::Transport(error.to_string()),
         })
     }

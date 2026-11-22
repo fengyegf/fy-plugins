@@ -77,11 +77,12 @@ impl LlmError {
                 }
             }
             // Anthropic：顶层 type=error，错误细节在 error 对象里。
-            if message.is_none() && value.get("type").and_then(Value::as_str) == Some("error") {
-                if let Some(error) = value.get("error") {
-                    message = string_field(error, "message");
-                    kind = kind.or_else(|| string_field(error, "type"));
-                }
+            if message.is_none()
+                && value.get("type").and_then(Value::as_str) == Some("error")
+                && let Some(error) = value.get("error")
+            {
+                message = string_field(error, "message");
+                kind = kind.or_else(|| string_field(error, "type"));
             }
             // 网关 / 中间层的扁平形状。
             if message.is_none() {
