@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "fengyegf.rusto",
   "name": "RustO OCR",
-  "version": "0.1.6",
+  "version": "0.1.5",
   "kind": "native",
   "entry": "bin/rusto.dll",
   "abi": 6,

@@ -835,7 +835,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-rusto"
-version = "0.1.6"
+version = "0.1.5"
 dependencies = [
  "base64 0.22.1",
  "fuyubot-plugin-api",
