@@ -3,8 +3,9 @@
 //! v0.2 起是**论坛群 + 话题**模式：
 //! - 用户私聊 bot 只走基础命令（`/bidistart`、`/bidihelp`），其余私聊消息由 relay 转发进群；
 //! - 管理命令全部在配置的论坛群里执行，**回复发在同一条话题里**（不要跳去 General）；
-//! - 没有 `/bidiclaim`：谁是主人由配置 `owner_id` 决定；`owner_id = 0` 时管理命令
-//!   一律不可用（群里还有别人，默认放权太危险）。
+//! - 没有 `/bidiclaim`：谁是主人由宿主的全局角色决定（`fuyubot.toml` 的 `[roles].owners`，
+//!   user 账户 `owners` 为空时自己就是主人）；插件段的 `owner_id` 只是**额外再加一个人**，
+//!   新部署不用重复配置。一个主人都没有时管理命令一律不可用（群里还有别人，默认放权太危险）。
 //!
 //! 一条纪律：**只认自己的命令，而且认得的命令一定要吃掉**。relay 先调这里，返回
 //! `false` 的消息才继续往下走；群里返回 `false` 的命令会被当成"主人的发言"发回给
@@ -15,10 +16,10 @@ pub mod parser;
 
 use std::sync::Arc;
 
-use fuyubot_plugin_api::HostExt as _;
+use fuyubot_plugin_api::{HostApi, HostExt as _};
 
 use crate::core::config::Config;
-use crate::host::{Ctx, IncomingMessage};
+use crate::host::{Ctx, IncomingMessage, roles};
 
 /// 非管理员在群里执行管理命令时的回复。
 ///
@@ -80,7 +81,7 @@ pub fn handle_user(ctx: &Arc<Ctx>, message: &IncomingMessage) -> bool {
 /// 群 / 话题里的命令。`topic_user` = 这条消息所在话题对应的用户（General 话题为 `None`）。
 ///
 /// 目标用户的解析顺序见 [`owner`]：命令里的显式 id 优先，其次才是 `topic_user`。
-/// 管理权限见 [`can_manage`]：`owner_id` 没配时**任何管理命令都不可用**。
+/// 管理权限见 [`can_manage`]：宿主的全局主人（`[roles].owners`）与插件段的 `owner_id` 都认。
 pub fn handle_group(ctx: &Arc<Ctx>, message: &IncomingMessage, topic_user: Option<i64>) -> bool {
     let config = ctx.config();
     // 防御一次：relay 已经按 chat_id 过滤过，这里再确认只认配置里的那个群。
@@ -91,7 +92,7 @@ pub fn handle_group(ctx: &Arc<Ctx>, message: &IncomingMessage, topic_user: Optio
     let Some(command) = parser::parse(&message.text, &config.prefixes) else {
         return false;
     };
-    let manager = can_manage(&config, message.sender_user_id);
+    let manager = can_manage(&ctx.host(), &config, message.sender_user_id);
 
     if command.name == "bidihelp" {
         reply(ctx, message, &help_text(manager));
@@ -100,8 +101,13 @@ pub fn handle_group(ctx: &Arc<Ctx>, message: &IncomingMessage, topic_user: Optio
     if owner::owns(&command.name) {
         // 认得就吃掉：返回 false 会被 relay 当成主人的发言发回给话题对应用户。
         if !manager {
+            let role = message
+                .sender_user_id
+                .and_then(|user_id| roles::role_of(&ctx.host(), user_id))
+                .map(|role| role.as_str())
+                .unwrap_or("未知");
             ctx.host().warn(&format!(
-                "bidibot: 发送者 {:?} 在群里尝试管理命令 /{}，已拒绝（owner_id = {}）",
+                "bidibot: 发送者 {:?} 在群里尝试管理命令 /{}，已拒绝（宿主角色 {role}，额外主人 owner_id = {}）",
                 message.sender_user_id, command.name, config.owner_id
             ));
             reply(ctx, message, NOT_ALLOWED);
@@ -114,15 +120,21 @@ pub fn handle_group(ctx: &Arc<Ctx>, message: &IncomingMessage, topic_user: Optio
 
 /// 这条消息的发送者有没有管理权限。
 ///
-/// **严格口径**（v0.2 定稿）：
-/// - `owner_id != 0`：只算这一个人；群里其他人发管理命令一律拒绝。
-/// - `owner_id == 0`：管理命令**全部不可用**。以前想过"不校验 = 群成员都能管理"，
-///   但群里还有别人，默认放权等于把拉黑 / 主动私聊任意用户的能力送给所有群成员。
-/// - 匿名管理员（`sender_user_id` 为 `None`）没有可比对的身份，永远不算。
+/// **判定口径**（v0.3：主人归宿主管）：
+/// - 宿主的全局角色说 `owner` 就认——`[roles].owners` 里的人都能管理，
+///   user 账户 `owners` 为空时自己就是主人（宿主的 `role` 方法已经算进去了）；
+/// - 插件段 `owner_id` 仍然认，语义是**额外再加一个主人**（向后兼容老配置）；
+/// - 匿名管理员（`sender_user_id` 为 `None`）没有可比对的身份，永远不算；
+/// - 一个主人都没有时管理命令**全部不可用**：群里还有别人，默认放权等于把拉黑 /
+///   主动私聊任意用户的能力送给所有群成员。
 ///
-/// 抽成纯函数：单测只要一个 [`Config`]，不必造 `HostApi`。
-pub fn can_manage(config: &Config, sender_user_id: Option<i64>) -> bool {
-    config.owner_id != 0 && sender_user_id == Some(config.owner_id)
+/// 宿主命令闸门（登记时 `role = "owner"`）通常已经先拦了一道，这里是插件侧兜底。
+/// 判定本体在 [`roles::is_owner`]，纯函数部分可单测。
+pub fn can_manage(host: &HostApi, config: &Config, sender_user_id: Option<i64>) -> bool {
+    let Some(sender) = sender_user_id else {
+        return false;
+    };
+    roles::is_owner(host, config.owner_id, sender)
 }
 
 /// `/bidihelp` 的正文。`with_owner` = 发给管理员看，额外列出管理命令。
@@ -242,15 +254,15 @@ mod tests {
     }
 
     #[test]
-    fn management_permission_follows_owner_id() {
-        let mut config = Config::default();
-        // owner_id == 0：严格口径——不信任任何发送者，管理命令一律不可用。
-        assert!(!can_manage(&config, Some(1)));
-        assert!(!can_manage(&config, None));
-        // 配了 owner_id：只认这个人；匿名管理员没有可比对的身份，不算。
-        config.owner_id = 42;
-        assert!(can_manage(&config, Some(42)));
-        assert!(!can_manage(&config, Some(43)));
-        assert!(!can_manage(&config, None));
+    fn management_permission_comes_from_global_roles() {
+        // 判定本体在 host::roles::is_owner_with（纯函数），这里把口径钉住：
+        // 宿主说 owner 就认，admin / user 不认；额外主人 owner_id 仍然生效。
+        use crate::host::roles::{GlobalRole, is_owner_with};
+        assert!(is_owner_with(0, 1, Some(GlobalRole::Owner), &[]));
+        assert!(!is_owner_with(0, 1, Some(GlobalRole::Admin), &[]));
+        assert!(!is_owner_with(0, 1, Some(GlobalRole::User), &[]));
+        assert!(is_owner_with(42, 42, None, &[]));
+        assert!(!is_owner_with(42, 43, None, &[]));
+        assert!(is_owner_with(0, 7, None, &[7]));
     }
 }

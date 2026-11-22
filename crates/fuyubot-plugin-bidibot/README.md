@@ -1,6 +1,6 @@
 # Bidibot 双向私聊中转
 
-`fengyegf.bidibot` · v0.1.1 · ABI v6 · Windows / Linux / macOS / Android
+`fengyegf.bidibot` · v0.1.2 · ABI v6 · Windows / Linux / macOS / Android
 
 ## 项目介绍
 
@@ -58,7 +58,7 @@ plugins/fengyegf.bidibot/
 | `/bidisay [id] <文字>` | 主人 · 群 | 以 bot 身份主动给某用户发一条 |
 | `/bidicard` | 主人 · 群 | 在当前话题里重发该用户的名片 |
 
-命令前缀来自 `[plugin.fengyegf.bidibot].prefixes`（默认 `/`、`!`、`！`、`.`、`#`）；宿主顶层 `[config].PREFIXES` 仅在插件未给前缀时兜底。管理命令登记为 `role = "owner"`，宿主的 `[roles].owners` 必须包含 `owner_id`，否则会被命令闸门拦下。
+命令前缀来自 `[plugin.fengyegf.bidibot].prefixes`（默认 `/`、`!`、`！`、`.`、`#`）；宿主顶层 `[config].PREFIXES` 仅在插件未给前缀时兜底。管理命令登记为 `role = "owner"`：谁能管理由**宿主全局角色**决定——`fuyubot.toml` 的 `[roles].owners`（user 账户 `owners` 为空时自己就是主人），插件段的 `owner_id` 只是额外再加一个人，新部署不需要重复配置。
 
 ## 配置一览
 
@@ -67,7 +67,7 @@ plugins/fengyegf.bidibot/
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
 | `group_id` | `0` | 论坛超级群 id（负数）；`0` = 未配置，私聊只回「暂时不可用」 |
-| `owner_id` | `0` | 允许下管理命令 / 回复用户的主人 user id；`0` = 管理命令全部不可用 |
+| `owner_id` | `0` | **额外**主人 user id（向后兼容）。主人优先取宿主 `[roles].owners`；`0` = 不加人 |
 | `ad_mode` | `keyword` | 广告判定：`off` / `keyword` / `llm`；配 `llm` 但没有 AI 凭据时自动退回 `keyword` |
 | `ai_base_url` | `https://api.openai.com/v1` | OpenAI 兼容 API 地址（仅 `ad_mode = "llm"` 使用） |
 | `ai_api_key` | 空 | 大模型 API key；留空 = 不用大模型 |
@@ -96,19 +96,20 @@ plugins/fengyegf.bidibot/
 
 **安装**：从插件商店安装；或 `fuyubot plugin install ./bidibot`；或把发布包解压到 `plugins/fengyegf.bidibot/` 后重启宿主。
 
-**准备群**：建一个开启话题的超级群（Forum），把 bot 拉进去并给「管理话题」权限；群 id 填 `group_id`（负数），主人 user id 填 `owner_id`。
+**准备群**：建一个开启话题的超级群（Forum），把 bot 拉进去并给「管理话题」权限；群 id 填 `group_id`（负数），主人 user id 填宿主顶层的 `[roles].owners`（插件段不用再写一遍）。
 
 最小配置：
 
 ```toml
+# 主人 / 全局管理员归宿主管，插件不重复配置
+[roles]
+owners = [123456789]         # 主人；user 账户留空 = 自己就是主人
+
 [plugin.fengyegf.bidibot]
 group_id = -1001234567890    # 论坛群 id，0 = 未配置
-owner_id = 123456789         # 主人 user id，0 = 管理命令不可用
 ad_mode = "keyword"          # off | keyword | llm
 card_image = true            # 有 fuyubot.html2img 时渲染名片图
-
-[roles]
-owners = [123456789]         # 必须包含 owner_id，否则宿主会拦下 /bidi*
+# owner_id = 987654321       # 可选：额外再加一个主人
 ```
 
 **典型用法**：
@@ -124,7 +125,7 @@ cargo build --release -p fuyubot-plugin-bidibot
 python scripts/package.py --plugin bidibot --platform windows-x86_64
 ```
 
-**发布**：`git tag fengyegf.bidibot-v0.1.1 && git push origin fengyegf.bidibot-v0.1.1`。
+**发布**：`git tag fengyegf.bidibot-v0.1.2 && git push origin fengyegf.bidibot-v0.1.2`。
 
 ## 项目依赖（软/硬）
 

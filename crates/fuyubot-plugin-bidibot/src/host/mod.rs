@@ -1,6 +1,7 @@
 //! 宿主适配层：把 HostApi、配置、存储、发送器、限流收进一个可共享的 Ctx。
 
 pub mod messenger;
+pub mod roles;
 pub mod worker;
 
 pub use messenger::{Messenger, Sent, UserInfo};

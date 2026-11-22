@@ -22,7 +22,8 @@
 //!   （Telegram 内建命令，跨插件重名会被宿主拒绝；欢迎语写在 `/bidihelp` 里）。
 //!
 //! `role` / `scopes` / `hidden` 只是**声明**，必须与代码里实际的权限判断一致：
-//! 执行权限由 [`crate::cmd::handle_group`] 的"配置的群 + owner_id（0 = 管理命令不可用）"决定，
+//! 执行权限由 [`crate::cmd::handle_group`] 的"配置的群 + 宿主全局角色 `owner`"决定
+//! （`[roles].owners` 里的人，插件段 `owner_id` 属于额外再加的主人），
 //! 登记不会放宽也不会收紧它。
 
 use fuyubot_plugin_api::{HostApi, HostExt};

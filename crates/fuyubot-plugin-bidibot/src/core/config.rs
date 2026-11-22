@@ -1,7 +1,8 @@
 //! 运行期配置：全部来自宿主 [plugin.fengyegf.bidibot] 段（fuyubot.toml）。
 //!
-//! 缺省值对一份"什么都没配"的 toml 也安全：owner_id = 0 时插件只做基础命令，
-//! 不会往任何地方中转。键名同时接受 snake_case 与全大写写法。
+//! 缺省值对一份"什么都没配"的 toml 也安全：group_id = 0 时不会往任何地方中转；
+//! 主人来自宿主 `[roles]`，`owner_id = 0` 只是「不额外加人」。键名同时接受
+//! snake_case 与全大写写法。
 //!
 //! 可变的封禁 / 警告 / 名片头映射**不在这里**——那些进本地库（core::store）。
 
@@ -95,7 +96,10 @@ pub const TOPIC_COLORS: [i64; 6] = [0x6FB9F0, 0xFFD67E, 0xCB86DB, 0x8EEE98, 0xFF
 pub struct Config {
     /// 论坛超级群 id（负数）。0 = 未配置。
     pub group_id: i64,
-    /// 允许下管理命令、把回复转给用户的人；0 = 未配置（管理命令一律不可用）。
+    /// **额外**的主人 user id（向后兼容老配置）；0 = 不加人。
+    ///
+    /// 真正的主人来自宿主全局角色（`fuyubot.toml` 的 `[roles].owners`），
+    /// 由 [`crate::host::roles`] 查询，这里只是再多认一个人。
     pub owner_id: i64,
     pub ad_mode: AdMode,
     pub ai: AiConfig,

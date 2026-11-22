@@ -17,7 +17,7 @@ use crate::core::ad::{AdJudge, Verdict};
 use crate::core::config::Config;
 use crate::core::store::{Profile, TopicRecord};
 use crate::host::messenger::Error as MessengerError;
-use crate::host::{Ctx, IncomingMessage, UserInfo, now};
+use crate::host::{Ctx, IncomingMessage, UserInfo, now, roles};
 
 /// 一条消息的入口：按"私聊 / 我们的论坛群"分流。
 pub fn handle(ctx: &Arc<Ctx>, message: &IncomingMessage) {
@@ -227,9 +227,9 @@ fn handle_group(ctx: &Arc<Ctx>, message: &IncomingMessage, config: &Config) {
         return;
     }
 
-    // 只有配置的主人能往用户那边发；群里其他人闲聊一律忽略。
-    let is_owner = config.owner_id != 0 && sender == config.owner_id;
-    if !is_owner {
+    // 只有主人能往用户那边发；群里其他人闲聊一律忽略。
+    // 主人来自宿主全局角色（`[roles].owners`），插件段 `owner_id` 是额外那一个。
+    if !roles::is_owner(&ctx.host(), config.owner_id, sender) {
         return;
     }
     let Some(user_id) = topic_user else {

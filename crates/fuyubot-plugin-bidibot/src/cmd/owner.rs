@@ -21,7 +21,7 @@ use super::reply;
 use crate::cmd::parser::Command;
 use crate::core::config::{Config, DEFAULT_AD_KEYWORDS};
 use crate::core::store::{BanRecord, StoreStats};
-use crate::host::{Ctx, IncomingMessage, human_age, now};
+use crate::host::{Ctx, IncomingMessage, human_age, now, roles};
 
 /// `/bidilist` 最多显示多少条：再多就是刷屏，剩下的让操作者看本地库。
 const LIST_LIMIT: usize = 20;
@@ -88,8 +88,8 @@ fn ban(ctx: &Arc<Ctx>, message: &IncomingMessage, command: &Command, topic_user:
         }
     };
     let user_id = target.user_id;
-    if config.owner_id != 0 && user_id == config.owner_id {
-        reply(ctx, message, "🙃 不能拉黑自己。");
+    if roles::is_owner(&ctx.host(), config.owner_id, user_id) {
+        reply(ctx, message, "🙃 不能拉黑主人自己。");
         return;
     }
     if let Some(record) = ctx.store.is_banned(user_id) {
@@ -104,7 +104,9 @@ fn ban(ctx: &Arc<Ctx>, message: &IncomingMessage, command: &Command, topic_user:
         );
         return;
     }
-    match ctx.store.ban(user_id, &reason, config.owner_id, false) {
+    // 操作者记**真实发命令的人**：主人可能不止一个（`[roles].owners`）。
+    let operator = message.sender_user_id.unwrap_or(config.owner_id);
+    match ctx.store.ban(user_id, &reason, operator, false) {
         Ok(()) => {
             ctx.host()
                 .info(&format!("bidibot: 拉黑 {user_id}（{reason}）"));
@@ -496,24 +498,27 @@ fn card(ctx: &Arc<Ctx>, message: &IncomingMessage, topic_user: Option<i64>) {
 fn status(ctx: &Arc<Ctx>, message: &IncomingMessage) {
     let config = ctx.config();
     let stats = ctx.store.stats();
+    // 主人一栏：宿主 `[roles].owners` + 插件段额外主人（user 账户会显示账号自己）。
+    let owner = roles::owner_label(&ctx.host(), config.owner_id);
     reply(
         ctx,
         message,
-        &render_status(&config, stats, ctx.started_at, now()),
+        &render_status(&config, &owner, stats, ctx.started_at, now()),
     );
 }
 
-/// 运行状态正文。纯函数：配置 + 库计数 + 时间 → 文案，单测不必造 `Ctx`。
-pub fn render_status(config: &Config, stats: StoreStats, started_at: u64, current: u64) -> String {
+/// 运行状态正文。纯函数：配置 + 主人文案 + 库计数 + 时间 → 文案，单测不必造 `Ctx`。
+pub fn render_status(
+    config: &Config,
+    owner: &str,
+    stats: StoreStats,
+    started_at: u64,
+    current: u64,
+) -> String {
     let group = if config.group_id == 0 {
         "未配置（转发不会工作）".to_owned()
     } else {
         config.group_id.to_string()
-    };
-    let owner = if config.owner_id == 0 {
-        "未配置（管理命令不可用）".to_owned()
-    } else {
-        config.owner_id.to_string()
     };
     let ai = if config.ai_enabled() {
         "已配置"
@@ -1038,7 +1043,13 @@ mod tests {
 
     #[test]
     fn status_shows_group_admin_and_effective_modes() {
-        let text = render_status(&Config::default(), StoreStats::default(), 1_000, 4_600);
+        let text = render_status(
+            &Config::default(),
+            "未配置（管理命令不可用）",
+            StoreStats::default(),
+            1_000,
+            4_600,
+        );
         assert!(text.contains("群：未配置"), "{text}");
         assert!(text.contains("管理员：未配置（管理命令不可用）"), "{text}");
         assert!(!text.contains("翻译："), "翻译功能已删除: {text}");
@@ -1063,7 +1074,7 @@ mod tests {
             rate_limit_per_min: 0,
             ..Config::default()
         };
-        let text = render_status(&config, stats, 0, 30);
+        let text = render_status(&config, "777", stats, 0, 30);
         assert!(text.contains("群：-1001234567890"), "{text}");
         assert!(text.contains("管理员：777"), "{text}");
         assert!(text.contains("封禁 2 人"), "{text}");

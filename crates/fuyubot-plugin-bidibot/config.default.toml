@@ -1,5 +1,7 @@
 # bidibot 默认配置（最低优先级，[plugin.fengyegf.bidibot] 中同名键会覆盖）
 group_id = 0
+# 主人来自宿主 [roles].owners（user 账户 owners 为空时自己就是主人），
+# 这里一般不用配；owner_id 非 0 = 额外再加一个主人。
 owner_id = 0
 ad_mode = "keyword"
 ai_base_url = "https://api.openai.com/v1"

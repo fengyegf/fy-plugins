@@ -51,10 +51,19 @@ impl Plugin for Bidibot {
                 "bidibot: [plugin.fengyegf.bidibot].group_id 还没配置——私聊消息只回「暂时不可用」，不会转发进群",
             );
         }
-        if config.owner_id == 0 {
-            self.host.warn(
-                "bidibot: [plugin.fengyegf.bidibot].owner_id 还没配置——群里任何人的回复都不会转给用户（只能看不能回）",
-            );
+        // 主人来自宿主全局角色（`[roles].owners`）；插件段的 owner_id 只是额外那一个。
+        let owner = crate::host::roles::owner_label(&self.host, config.owner_id);
+        if crate::host::roles::effective_owners(&self.host, config.owner_id).is_empty() {
+            if crate::host::roles::self_id(&self.host).is_none() {
+                // 还没登录：user 账户「自己就是主人」要等 `getMe` 之后才判得出来。
+                self.host.info(
+                    "bidibot: 启动时还拿不到账号身份，主人等登录后按宿主 [roles] 再判（管理命令在此时不可用）",
+                );
+            } else {
+                self.host.warn(
+                    "bidibot: 没有可用的主人——宿主 [roles].owners 为空、owner_id 也没配；群里任何人的回复都不会转给用户（bot 账户把主人 id 写进 [roles].owners，user 账户 owners 为空时自己就是主人）",
+                );
+            }
         }
         let worker = Worker::start(self.host, config.clone())?;
         let subscription =
@@ -71,11 +80,7 @@ impl Plugin for Bidibot {
             } else {
                 config.group_id.to_string()
             },
-            if config.owner_id == 0 {
-                "未配置（管理命令不可用）".to_owned()
-            } else {
-                config.owner_id.to_string()
-            },
+            owner,
             config.effective_ad_mode(),
             config.store_path
         ));
