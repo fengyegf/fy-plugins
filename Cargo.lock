@@ -821,7 +821,6 @@ dependencies = [
  "encoding_rs",
  "fuyubot-plugin-api",
  "hatchzip-core",
- "percent-encoding",
  "scraper",
  "serde",
  "serde_json",
