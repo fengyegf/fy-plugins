@@ -12,8 +12,18 @@
 //! （`*det*.{mnn,rten}` / `*rec*.{mnn,rten}` / `*dict*.{txt,json}`）。
 //! det 与 rec 必须同格式，否则视为不完整。
 //!
-//! `model_dir` 为空时依次尝试（相对进程工作目录，返回前转绝对路径）：
-//! `./data/plugins/rusto/models` → `./models` → rusto 自身缓存目录。
+//! `model_dir` 为空时依次尝试（都先转绝对路径）：
+//!
+//! 1. `<工作目录>/plugins/fengyegf.rusto/models` —— 随包分发的离线模型；
+//! 2. 动态库自身位置推出的 `<插件目录>/models`（从 `/proc/self/maps` 读真实路径）——
+//!    安卓上宿主把插件解压到 app 私有目录、cwd 不是插件目录，靠这条兜住；
+//! 3. `<工作目录>/data/plugins/rusto/models` —— 历史下载落点；
+//! 4. `<工作目录>/models`；
+//! 5. rusto 自身缓存目录。
+//!
+//! 注意 cwd 在安卓上通常是 `/`：直接拼相对路径会得到 `/data/plugins/...`，那是
+//! 系统分区（`root:system` 0771），app uid 建不了子目录，`create_dir_all` 直接
+//! EACCES（os error 13）——所以候选目录必须包含「动态库自身位置」这条。
 //!
 //! 格式取舍：.mnn 优先。两种格式都由 `rusto-nn` 的纯 Rust 解析器读，
 //! 不需要打开 `rten` feature；性能基准与选型记录见提交历史。
@@ -25,11 +35,15 @@
 //! `https://huggingface.co/byrizki/rusto-models/resolve/main/ppocrv6-tiny-int8/det.mnn`。
 //! 下载器内部用 curl / wget / powershell 子进程 + `.part` + `rename`（原子）；
 //! 本模块再套一层 staging 目录，三件套齐了才整体搬进目标目录，避免半套模型。
+//!
+//! 下载能力先探测：安卓用户态一般没有 curl / wget / powershell，探测不到就直报
+//! 「只能手动放模型」，不再去建 staging 目录（那里只会报误导性的权限错误）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::core::config::PLUGIN_NAME;
 use crate::engine::{EngineConfig, EngineError};
 
 /// 一次识别需要的三个文件。
@@ -51,6 +65,10 @@ pub const DEFAULT_MODELS_BASE: &str = "https://huggingface.co/byrizki/rusto-mode
 
 /// 缺省预设名（与 `core::config::DEFAULT_MODEL` 一致）。
 pub const DEFAULT_PRESET: &str = "ppocrv6-tiny-int8";
+
+/// 动态库文件名里的 stem（与 `Cargo.toml` 的 `[lib] name = "rusto"` 一致）。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const LIB_STEM: &str = "rusto";
 
 /// 模型文件候选扩展名，按优先级（.mnn 快路径优先）。
 const MODEL_EXTS: [&str; 2] = ["mnn", "rten"];
@@ -86,11 +104,30 @@ pub fn resolve(config: &EngineConfig) -> Result<ModelPaths, EngineError> {
             return Ok(paths);
         }
     }
-    let base = bases
-        .first()
-        .cloned()
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let base = bases.first().cloned().unwrap_or_else(current_dir);
+    if let Some(reason) = download_blocker() {
+        return Err(EngineError::ModelMissing(format!(
+            "找不到模型（预设 {preset}）：{}；{reason}；{}",
+            tried(&bases),
+            hint(&base.join(&preset))
+        )));
+    }
     download(config, &preset, &base)
+}
+
+/// 已经试过的目录清单（错误信息用；最多列 6 个，避免刷屏）。
+fn tried(bases: &[PathBuf]) -> String {
+    let list = bases
+        .iter()
+        .take(6)
+        .map(|base| base.display().to_string())
+        .collect::<Vec<_>>()
+        .join("、");
+    if bases.len() > 6 {
+        format!("已查找 {list} 等 {} 个目录", bases.len())
+    } else {
+        format!("已查找 {list}")
+    }
 }
 
 /// 预设名归一化（只用于目录名，不做版本推断）。
@@ -127,11 +164,12 @@ pub fn candidate_dirs(config: &EngineConfig) -> Vec<PathBuf> {
     if let Some(dir) = &config.model_dir {
         return vec![absolute(dir)];
     }
-    let mut dirs = Vec::with_capacity(3);
-    if let Ok(cwd) = std::env::current_dir() {
-        dirs.push(cwd.join(DATA_SUBDIR));
-        dirs.push(cwd.join("models"));
-    }
+    let cwd = current_dir();
+    let mut dirs = Vec::with_capacity(8);
+    dirs.extend(bundled_dirs(&cwd));
+    dirs.extend(library_model_bases());
+    dirs.push(cwd.join(DATA_SUBDIR));
+    dirs.push(cwd.join("models"));
     // 用户此前跑过 rusto CLI 时，模型可能已在它的缓存目录里（只读复用）。
     let cache = rusto::models::get_cache_dir(None);
     if !cache.as_os_str().is_empty() {
@@ -139,6 +177,87 @@ pub fn candidate_dirs(config: &EngineConfig) -> Vec<PathBuf> {
     }
     dirs.dedup();
     dirs
+}
+
+/// 进程工作目录（拿不到时回退 `.`，保证错误信息里总有可读路径）。
+fn current_dir() -> PathBuf {
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// 随包分发的模型目录：`<工作目录>/plugins/<插件 id>/models`。
+fn bundled_dirs(cwd: &Path) -> Vec<PathBuf> {
+    vec![cwd.join("plugins").join(PLUGIN_NAME).join("models")]
+}
+
+/// 由动态库路径推出模型目录候选。
+///
+/// 发行布局是 `<插件目录>/bin/librusto.so` + `<插件目录>/models/<preset>/`，所以
+/// 「动态库同级 `models`」与「上两级 `models`」都要看；bin 目录和插件目录本身也
+/// 当根，兼容把三件套直接摊在里面的部署。纯路径运算，不碰文件系统（便于单测）。
+pub fn model_bases_of(lib: &Path) -> Vec<PathBuf> {
+    let Some(bin) = lib.parent() else {
+        return Vec::new();
+    };
+    let mut bases = vec![bin.join("models"), bin.to_path_buf()];
+    if let Some(root) = bin.parent() {
+        bases.push(root.join("models"));
+        bases.push(root.to_path_buf());
+    }
+    bases
+}
+
+/// 动态库位置推出的模型目录候选（安卓的关键路径：cwd 不是插件目录）。
+fn library_model_bases() -> Vec<PathBuf> {
+    let mut bases = Vec::new();
+    for lib in library_paths() {
+        bases.extend(model_bases_of(&lib));
+    }
+    bases
+}
+
+/// 宿主 `dlopen` 进来的本插件动态库路径。
+///
+/// 安卓上 `std::env::current_exe()` 指向 `app_process`，没法用来定位插件目录；
+/// `/proc/self/maps` 里能读到 `librusto.so` 被映射的真实路径。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn library_paths() -> Vec<PathBuf> {
+    let Ok(maps) = fs::read_to_string("/proc/self/maps") else {
+        return Vec::new();
+    };
+    library_paths_from_maps(&maps, &library_file_name())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn library_paths() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+/// 从 `/proc/self/maps` 文本里挑出指定动态库的路径（同一库的多段映射去重）。
+///
+/// maps 行是「地址 权限 偏移 设备 inode 路径」，前五个字段里没有斜杠，
+/// 所以第一个斜杠就是路径起点（路径含空格也能整段取到）。抽成纯函数是为了
+/// 能在非 Linux 的构建机上用假 maps 验证安卓那条解析路径。
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+fn library_paths_from_maps(maps: &str, name: &str) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for line in maps.lines() {
+        let Some(start) = line.find('/') else {
+            continue;
+        };
+        let path = line[start..].trim_end();
+        if !path.ends_with(name) {
+            continue;
+        }
+        paths.push(PathBuf::from(path));
+    }
+    paths.dedup();
+    paths
+}
+
+/// 动态库文件名（与 `[lib] name` 拼出来的 `librusto.so`）。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn library_file_name() -> String {
+    format!("lib{LIB_STEM}.so")
 }
 
 /// 相对路径转绝对路径（失败时原样返回，至少错误信息能看懂）。
@@ -238,6 +357,31 @@ const DOWNLOAD_PLAN: [(&str, [&str; 3]); 2] = [
     ("mnn", ["det.mnn", "rec.mnn", "dict.txt"]),
     ("rten", ["det.rten", "rec.rten", "dict.txt"]),
 ];
+
+/// 下载器依赖的本机命令（rusto 只会起这三个子进程）。
+const DOWNLOAD_TOOLS: [&str; 3] = ["curl", "wget", "powershell"];
+
+/// 自动下载受阻的原因；`None` = 环境里至少有一个可用的下载命令。
+fn download_blocker() -> Option<String> {
+    if DOWNLOAD_TOOLS.iter().any(|tool| command_exists(tool)) {
+        return None;
+    }
+    Some(if cfg!(target_os = "android") {
+        "安卓上没有 curl / wget / powershell，rusto 的下载器（起子进程）用不了，只能手动放模型"
+            .to_owned()
+    } else {
+        "系统里找不到 curl / wget / powershell，无法自动下载模型".to_owned()
+    })
+}
+
+/// PATH 里是否有这个可执行文件（Windows 额外认 `.exe`）。
+fn command_exists(name: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path)
+        .any(|dir| dir.join(name).is_file() || dir.join(format!("{name}.exe")).is_file())
+}
 
 /// 下载三件套到 `<base>/<preset>/`（staging → 原子搬入）。
 fn download(config: &EngineConfig, preset: &str, base: &Path) -> Result<ModelPaths, EngineError> {
@@ -463,5 +607,53 @@ mod tests {
         let dirs = candidate_dirs(&config(Some(PathBuf::from("relative/models"))));
         assert_eq!(dirs.len(), 1);
         assert!(dirs[0].is_absolute());
+    }
+
+    #[test]
+    fn library_layout_models_are_discovered() {
+        let temp = TempDir::new("library-layout");
+        let plugin = temp.0.join(PLUGIN_NAME);
+        let lib = plugin.join("bin").join("librusto.so");
+        touch(&lib);
+        let models = plugin.join("models").join(DEFAULT_PRESET);
+        touch(&models.join("det.mnn"));
+        touch(&models.join("rec.mnn"));
+        touch(&models.join("dict.txt"));
+        let paths = model_bases_of(&lib)
+            .iter()
+            .find_map(|base| find_in(base, DEFAULT_PRESET))
+            .expect("动态库所在插件目录应能解析到模型");
+        assert_eq!(paths.format(), "mnn");
+    }
+
+    #[test]
+    fn library_bases_cover_bin_and_plugin_root() {
+        let bases = model_bases_of(Path::new("/data/plugins/fengyegf.rusto/bin/librusto.so"));
+        assert!(bases.contains(&PathBuf::from("/data/plugins/fengyegf.rusto/bin/models")));
+        assert!(bases.contains(&PathBuf::from("/data/plugins/fengyegf.rusto/models")));
+    }
+
+    #[test]
+    fn unknown_download_tool_is_not_found() {
+        assert!(!command_exists("rusto-no-such-download-tool"));
+    }
+
+    #[test]
+    fn android_maps_lines_yield_plugin_library() {
+        // 真实的安卓 maps 形态：同一个 .so 有多段映射，旁边还有无关的 .so 与匿名段。
+        let maps = "\
+7c1a0000-7c1a1000 r--p 00000000 fd:00 1234 /data/data/com.example.fuyubot/files/plugins/fengyegf.rusto/bin/librusto.so
+7c1a1000-7c1a2000 r-xp 00010000 fd:00 1234 /data/data/com.example.fuyubot/files/plugins/fengyegf.rusto/bin/librusto.so
+7c1a3000-7c1a4000 r-xp 00000000 fd:00 9999 /system/lib64/libc.so
+7c1a5000-7c1a6000 rw-p 00000000 00:00 0 [anon:dalvik]
+";
+        let paths = library_paths_from_maps(maps, "librusto.so");
+        assert_eq!(paths.len(), 1, "同一库的多段映射应去重");
+        let plugin = PathBuf::from("/data/data/com.example.fuyubot/files/plugins/fengyegf.rusto");
+        assert_eq!(paths[0], plugin.join("bin/librusto.so"));
+        assert!(
+            model_bases_of(&paths[0]).contains(&plugin.join("models")),
+            "插件根目录下的 models 必须进候选"
+        );
     }
 }

@@ -4,6 +4,10 @@ max_side = 960
 concurrency = 1
 rec_workers = 1
 model = "ppocrv6-tiny-int8"
+# 模型根目录；空 = 依次找 plugins/fengyegf.rusto/models、动态库所在插件目录的
+# models/、data/plugins/rusto/models、models、rusto 缓存。安卓没有 curl / wget，
+# 自动下载不可用：把三件套放到 app 私有目录后在这里指过去，再重载插件。
+# model_dir = ""
 detail_default = false
 reply_placeholder = true
 chunk_size = 3800

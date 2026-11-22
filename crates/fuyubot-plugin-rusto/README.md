@@ -1,10 +1,10 @@
 # RustO OCR
 
-fengyegf.rusto · v0.1.3 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+fengyegf.rusto · v0.1.4 · ABI v6 · windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
-RustO OCR 是一个**纯 Rust 的图片文字识别插件**：图片进、文本出。引擎是 [RustO!](https://github.com/byrizki/rusto-rs)（`rusto-rs` 0.4.1 + 纯 Rust 的 MNN 运行时 `rusto-nn`），模型为 PP-OCRv6 Tiny INT8 的 det / rec / dict 三件套；不依赖 Python、OpenCV、ONNX Runtime，也不起下载子进程。
+RustO OCR 是一个**纯 Rust 的图片文字识别插件**：图片进、文本出。引擎是 [RustO!](https://github.com/byrizki/rusto-rs)（`rusto-rs` 0.4.1 + 纯 Rust 的 MNN 运行时 `rusto-nn`），模型为 PP-OCRv6 Tiny INT8 的 det / rec / dict 三件套；不依赖 Python、OpenCV、ONNX Runtime，只有缺模型时才会调 rusto 的下载器（起 curl / wget / powershell 子进程），安卓上没有这些命令，请用带 `models/` 的离线包。
 
 - **解决什么问题**：截图、聊天记录、票据里的文字想直接拿走；其它插件需要 OCR 时不必各自引引擎。
 - **用户侧入口**：回复图片发 `/ocr`，或图片说明写 `/ocr`；私聊直发图且 `auto = true` 时才自动识别（默认关，不抢图）。
@@ -67,7 +67,7 @@ plugins/fengyegf.rusto/
 | `concurrency` | `1` | 同时识别数，夹紧到 1–8；单引擎峰值内存约 300–400 MiB |
 | `rec_workers` | `1` | 引擎识别线程数，0–8；`0` = 按 CPU 核数自选（16 核约 15 线程） |
 | `model` | `"ppocrv6-tiny-int8"` | 模型预设名，同时是模型目录名；另有 `ppocrv6-tiny` / `-fp16` / `-small` / `-medium` 等档位 |
-| `model_dir` | 空 | 模型根目录；空 = 依次尝试 `./data/plugins/rusto/models`、`./models`、rusto 缓存目录 |
+| `model_dir` | 空 | 模型根目录；空 = 依次尝试 `./plugins/fengyegf.rusto/models`（随包离线模型）、动态库所在插件目录的 `models/`（安卓靠这条）、`./data/plugins/rusto/models`、`./models`、rusto 缓存目录 |
 | `mirror` | 空 | 模型下载源前缀；空 = HuggingFace 官方源 |
 | `detail_default` | `false` | `/ocr` 默认是否带行级明细 |
 | `reply_placeholder` | `true` | 是否先回「识别中…」占位消息，再编辑为结果 |
@@ -95,7 +95,9 @@ model = "ppocrv6-tiny-int8"
 
 **典型用法**：对图片消息回复 `/ocr`；或直接在图片说明里写 `/ocr`；要看行级明细用 `/ocr detail`。部署后先 `/ocr warm`，再用 `/ocr status` 确认 `loaded = true`。默认先回「识别中…」再编辑成结果，超长文本按 `chunk_size` 分块并带「（1/N）」；没有图片会回复用法提示。
 
-**模型获取**：默认首启识别时按 `model` 找模型，缺了就从 HuggingFace 下载（可用 `mirror` 换源），之后零网络；离线 / 内网环境用 `python scripts/fetch-models.py` 把三件套放进 `crates/fuyubot-plugin-rusto/models/<preset>/`（`.mnn` 优先、`.rten` 兜底，det 与 rec 须同格式）。手动放置时目录是 `<model_dir>/<preset>/{det,rec,dict}`，放好后 `/ocr warm` 或重载插件即可。
+**模型获取**：按 `model` 预设找模型，查找顺序是「配置 `model_dir` → 随包的 `plugins/fengyegf.rusto/models/<preset>/` → 动态库所在插件目录的 `models/<preset>/` → 旧下载落点 `data/plugins/rusto/models` → `models` → rusto 缓存」。全都没有才会调 rusto 的下载器（curl / wget / powershell 子进程，可用 `mirror` 换源），之后零网络。手动放置时目录是 `<model_dir>/<preset>/{det,rec,dict}`（`.mnn` 优先、`.rten` 兜底，det 与 rec 须同格式），放好后 `/ocr warm` 或重载插件即可。离线 / 内网环境用 `python scripts/fetch-models.py` 把三件套放进 `crates/fuyubot-plugin-rusto/models/<preset>/`，打包时会自动带上。
+
+**安卓**：宿主进程的 cwd 是 `/`，任何「相对工作目录」的路径都会落到 `/data/...`（系统分区，app 不可写），所以安卓上不要指望自动下载（用户态没有 curl / wget）：用带 `models/` 的离线包，让插件从动态库所在目录推出 `models/`；或者把三件套放到 app 私有目录（如 `/data/data/<宿主包名>/files/plugins/fengyegf.rusto/models/<preset>/`）再把配置里的 `model_dir` 指过去。改完 `fuyubot.toml` 要重载插件（无热重载），然后 `/ocr warm`，用 `/ocr status` 确认 `loaded = true`。
 
 **构建与打包**：
 
@@ -110,7 +112,7 @@ python scripts/package.py --plugin rusto --platform linux-x86_64 \
   --target-triple x86_64-unknown-linux-gnu
 ```
 
-`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/fengyegf.rusto-0.1.3-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
+`package.py` 会把 crate 根的 `models/` 与 `NOTICE.md` **自动**打进 bundle（存在才带），`--assets` 只用于追加别的文件；产物为 `dist/fengyegf.rusto-0.1.4-windows-x86_64.zip`，ZIP 根就是插件目录内容。体积参考：`rusto.dll` 约 3.2 MiB、模型三件套约 3.5 MB；离线包 zip 实测约 4.2 MiB（解压 ≈6.7 MB），远低于商城 50 MB 上限；不带 `models/` 即在线包。
 
 **Linux 的 glibc 基线**：动态库里的 `GLIBC_x.y` 符号版本由**构建机**决定，用太新的发行版构建，老机器上宿主 `dlopen` 会直接失败，而日志只有一句 `dlopen failed`：
 
@@ -123,8 +125,8 @@ python scripts/package.py --plugin rusto --platform linux-x86_64 \
 **发布**：
 
 ```bash
-git tag fengyegf.rusto-v0.1.3
-git push origin fengyegf.rusto-v0.1.3
+git tag fengyegf.rusto-v0.1.4
+git push origin fengyegf.rusto-v0.1.4
 ```
 
 ## 项目依赖（软/硬）
