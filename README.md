@@ -56,7 +56,7 @@ plugins/<id>/
 | [`fengyegf.musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.6 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
 | [`fengyegf.epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.6 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
 | [`fengyegf.kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.7 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
-| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.6 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
+| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.7 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
 | [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.2 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
 | [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
 | [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.2 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |

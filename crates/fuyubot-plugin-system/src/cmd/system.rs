@@ -7,7 +7,7 @@
 //!   → getSystemInformation()          // systeminformation → core::sysinfo
 //!   → getOption("version"/"commit_hash")  // TDLib
 //!   → getMe() + 头像                   // TDLib
-//!   → getConfig("admin").super_admin → getUser(admin) + 头像  // 配置 + TDLib
+//!   → [roles].owners（或插件段 super_admin）→ getUser(admin) + 头像  // 全局配置 + TDLib
 //!   → pluginManager.getPlugins()      // 宿主 list_plugins
 //!   → render::render_card(card, …)    // Vue 模板 + data → 宿主 fuyubot.html2img
 //!   → send_photo（回复走宿主 fuyubot.host.command）  // host::messenger
@@ -16,7 +16,8 @@
 //!
 //! 与 TS 版的两处主动降级（都是宿主能力决定的，见 README）：
 //! - TDLib 查询失败不炸整条命令：卡片照出，对应字段显示「未知」；
-//! - 管理员来自 `[plugin.fengyegf.system] super_admin` 配置，不配就显示「未配置」。
+//! - 管理员来自宿主全局 `[roles].owners`（第一个），插件段 `super_admin` 只是显式覆盖；
+//!   都取不到才显示「未配置」。
 //!
 //! 渲染是**阻塞**调用（html2img 在宿主进程里同步跑完），整条流程只能待在业务线程里，
 //! 不能在宿主回调里调。
@@ -117,8 +118,13 @@ fn build_and_render(ctx: &Ctx) -> Result<PathBuf, String> {
         }
     };
 
-    // 4. 管理员（配置 + `getUser`）；没配就是 None。
-    let (admin, admin_photo) = match ctx.config.super_admin {
+    // 4. 管理员（插件段 super_admin → 宿主 `[roles]` + `getUser`）；都没有就是 None。
+    // 这里再问一次宿主：`start()` 时可能还没登录，`[roles]` 也可能刚改过。
+    let admin_id = ctx
+        .config
+        .super_admin
+        .or_else(|| crate::core::config::host_owner(&ctx.host));
+    let (admin, admin_photo) = match admin_id {
         Some(user_id) => match td.get_user(user_id, timeout) {
             Ok(user) => {
                 let identity = td::identity_of(&user);

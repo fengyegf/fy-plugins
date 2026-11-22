@@ -13,8 +13,8 @@
 //!
 //! 两点与 TS 版不同（都是宿主能力决定的，见 README 的「与 TS 版的差异」）：
 //!
-//! - 管理员改成可选的 `[plugin.fengyegf.system] super_admin` 配置——Rust 宿主没有 TS 版那套
-//!   `[admin]` 数据库段；
+//! - 管理员取宿主全局 `[roles].owners`（第一个），`[plugin.fengyegf.system].super_admin`
+//!   只是显式覆盖——Rust 宿主没有 TS 版那套 `[admin]` 数据库段；
 //! - 插件清单只有名字与状态（宿主 `list_plugins` 的字段），没有版本号。
 //!
 //! 图片不放进 [`CardData`]：它们来自网络/本地文件，取不到时只该降级成占位图，
@@ -90,7 +90,7 @@ impl PluginChip {
 pub struct CardData {
     /// 机器人自己（`getMe`）。
     pub bot: Identity,
-    /// 配置里的超级管理员（`[plugin.fengyegf.system] super_admin` + `getUser`）；没配就是 `None`。
+    /// 管理员（宿主 `[roles].owners` 的第一个，或插件段 `super_admin`；再走 `getUser`）；没有就是 `None`。
     pub admin: Option<Identity>,
     /// TDLib 版本。
     pub tdlib: TdlibInfo,

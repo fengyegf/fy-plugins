@@ -4,7 +4,7 @@
 //!
 //! ```toml
 //! [plugin.fengyegf.system]
-//! super_admin   = 123456789      # 超级管理员 user id；不配就没有 admin 卡片
+//! super_admin   = 123456789      # 可选：显式指定管理员；不写就用宿主 [roles].owners
 //! background_url = "https://…"   # 卡片背景图（公网 URL，由 html2img 拉取）；留空 = 纯渐变
 //! timeout_ms     = 5000          # 单次 TDLib 调用超时
 //! prefixes       = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
@@ -12,11 +12,15 @@
 //!
 //! 读取顺序：`start()` 传进来的配置 JSON（宿主给的 `plugins_dir` 等）→
 //! `get_config("fengyegf.system", "")` 兜底；两者缺什么就各自退回缺省值。
+//!
+//! 管理员（卡片 admin 一栏）**不再要求插件里重复配置**：没写 `super_admin` 时
+//! 自动取宿主全局 `[roles].owners` 的第一个人，没有主人再取 `[roles].admins` 的第一个；
+//! 都为空且宿主说「自己是主人」时（user 账户）取账号自己。`super_admin` 写了就以它为准。
 
 use std::time::Duration;
 
 use fuyubot_plugin_api::{HostApi, HostExt};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// 插件段名：`[plugin.fengyegf.system]`。
 pub const PLUGIN_NAME: &str = "fengyegf.system";
@@ -34,6 +38,80 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 /// 头像下载的缺省超时：`downloadFile(synchronous = true)` 要等整张图下载完，
 /// 5 秒的普通查询超时不够（弱网 / 大图时尤其明显）。
 const DEFAULT_AVATAR_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// 宿主预置的命令表服务：`role` 方法查全局角色。
+const COMMANDS_SERVICE: &str = "fuyubot.host.commands";
+/// 宿主预置的身份服务：`me` 方法拿自己的 user id。
+const IDENTITY_SERVICE: &str = "fuyubot.host.identity";
+
+/// 宿主全局的管理员：`[roles].owners` 的第一个，没有主人就取 `[roles].admins` 的第一个；
+/// 两者都为空时退回「自己就是主人」的 user 账户（`fuyubot.host.identity.me` + `role`）。
+///
+/// 出卡片时会再问一次（`start()` 那一刻可能还没登录，`me` 还拿不到）。
+pub(crate) fn host_owner(host: &HostApi) -> Option<i64> {
+    if let Some(id) = host_role_ids(host, "owners").first() {
+        return Some(*id);
+    }
+    if let Some(id) = host_role_ids(host, "admins").first() {
+        return Some(*id);
+    }
+    let me = self_id(host)?;
+    (role_of(host, me).as_deref() == Some("owner")).then_some(me)
+}
+
+/// 宿主的 `[roles].<field>`（如 owners / admins）；读不到（老宿主 / 裁剪版）就是空表。
+fn host_role_ids(host: &HostApi, field: &str) -> Vec<i64> {
+    let dotted = format!("roles.{field}");
+    for (section, key) in [("roles", field), ("roles", ""), ("", dotted.as_str())] {
+        let Some(value) = host.config_value(section, key) else {
+            continue;
+        };
+        let list = ids(value.get(field).unwrap_or(&value));
+        if !list.is_empty() {
+            return list;
+        }
+    }
+    Vec::new()
+}
+
+/// 问宿主这个人的全局角色（`user` / `admin` / `owner`）；不可用时 `None`。
+fn role_of(host: &HostApi, user_id: i64) -> Option<String> {
+    let input = json!({ "user_id": user_id }).to_string();
+    role_from_reply(&host.call_service(COMMANDS_SERVICE, "role", &input).ok()?)
+}
+
+/// `role` 方法的回包解析：`{"global":"owner"}`（也接受 `role` 字段）。
+fn role_from_reply(reply: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(reply).ok()?;
+    let text = value
+        .get("global")
+        .or_else(|| value.get("role"))?
+        .as_str()?;
+    Some(text.trim().to_ascii_lowercase())
+}
+
+/// 宿主自己的 user id（`getMe`）；没登录就是 `None`。
+fn self_id(host: &HostApi) -> Option<i64> {
+    let reply = host.call_service(IDENTITY_SERVICE, "me", "{}").ok()?;
+    let value: Value = serde_json::from_str(&reply).ok()?;
+    id(value.get("id")?)
+}
+
+/// JSON 里的 id 列表：数组、单个数字、数字字符串都认；0 与非法值丢弃。
+fn ids(value: &Value) -> Vec<i64> {
+    match value {
+        Value::Array(items) => items.iter().filter_map(id).collect(),
+        other => id(other).into_iter().collect(),
+    }
+}
+
+/// 单个 id：数字或数字字符串，0 / 非法值 → `None`。
+fn id(value: &Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_str().and_then(|text| text.trim().parse().ok()))
+        .filter(|id| *id != 0)
+}
 
 /// 运行期配置（构造一次，之后只读）。
 #[derive(Debug, Clone)]
@@ -77,6 +155,12 @@ impl Config {
         // 再走一遍配置读接口兜底（start 传空串时就需要它）。
         if let Some(value) = host.config_value(PLUGIN_NAME, "") {
             config.apply(&value);
+        }
+
+        // 管理员归宿主管：插件段没写 super_admin 就用 `[roles].owners`，
+        // 这样新部署只写一处主人，不用每个插件各配一遍。
+        if config.super_admin.is_none() {
+            config.super_admin = host_owner(host);
         }
 
         // 前缀：插件段里没写就跟随宿主顶层 `[config].PREFIXES`。
@@ -237,5 +321,25 @@ mod tests {
             "头像下载默认给 20 秒"
         );
         assert_eq!(config.prefixes, vec!["/", "!", "！", ".", "#"]);
+    }
+
+    #[test]
+    fn owner_ids_accept_numbers_strings_and_single_values() {
+        assert_eq!(ids(&json!([111, "222", 0, "x"])), vec![111, 222]);
+        assert_eq!(ids(&json!(333)), vec![333]);
+        assert_eq!(ids(&json!([])), Vec::<i64>::new());
+    }
+
+    #[test]
+    fn role_reply_is_understood() {
+        assert_eq!(
+            role_from_reply(r#"{"global":"OWNER"}"#).as_deref(),
+            Some("owner")
+        );
+        assert_eq!(
+            role_from_reply(r#"{"role":"admin"}"#).as_deref(),
+            Some("admin")
+        );
+        assert_eq!(role_from_reply("not json"), None);
     }
 }

@@ -1,6 +1,6 @@
 # System
 
-插件 id：`fengyegf.system` ｜ 版本：0.1.6 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id：`fengyegf.system` ｜ 版本：0.1.7 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -56,7 +56,7 @@ plugins/fengyegf.system/
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `super_admin` | 不配置 | 管理员 user id（正整数）；不配则卡片 admin 一栏显示「未配置」 |
+| `super_admin` | 不配置 | 管理员 user id（正整数）；不配时自动取宿主 `[roles].owners` 的第一个，没有主人再取 `[roles].admins` 的第一个（user 账户 `owners` 为空时是自己） |
 | `background_url` | 内置 B 站图 URL（见 `config.default.toml`） | 卡片背景公网 URL，由 html2img 拉取；写成空串则只用渐变 |
 | `timeout_ms` | `5000` | 单次 TDLib 调用超时（毫秒）；兼容旧写法 `timeout`（秒） |
 | `avatar_timeout_ms` | `20000` | 头像同步下载预算（毫秒）；兼容旧写法 `avatar_timeout`（秒） |
@@ -72,13 +72,16 @@ plugins/fengyegf.system/
 - 源码目录：`fuyubot plugin install ./system`；或
 - 手动解压 zip 到宿主的 `plugins/fengyegf.system/` 后重启宿主。
 
-**最小配置**（`fuyubot.toml`）：
+**最小配置**（`fuyubot.toml`）：插件本身可以一行都不写——管理员取宿主全局 `[roles]`：
 
 ```toml
+[roles]
+owners = [123456789]   # 主人；卡片 admin 一栏显示第一个
+
 [plugin.fengyegf.system]
-super_admin = 123456789
 timeout_ms = 5000
 avatar_timeout_ms = 20000
+# super_admin = 123456789   # 可选：显式指定卡片上的管理员
 ```
 
 `background_url` 写成空串可关掉背景图（纯渐变）；不写 `background_url` 或 `prefixes` 时，分别使用内置背景图与宿主前缀。
@@ -98,13 +101,13 @@ cargo build --release -p fuyubot-plugin-system
 python scripts/package.py --plugin system --platform windows-x86_64
 ```
 
-产出 `target/release/system.dll` 与 `fengyegf.system-0.1.6-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/system.dll`）。
+产出 `target/release/system.dll` 与 `fengyegf.system-0.1.7-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/system.dll`）。
 
 **发布**
 
 ```bash
-git tag fengyegf.system-v0.1.6
-git push origin fengyegf.system-v0.1.6
+git tag fengyegf.system-v0.1.7
+git push origin fengyegf.system-v0.1.7
 ```
 
 tag 名固定为 `<id>-v<version>`；同一版本已打过 tag 时，先递增 `plugin.json` 的版本号再打新 tag。
