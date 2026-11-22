@@ -15,33 +15,30 @@
 //! `model_dir` 为空时依次尝试（都先转绝对路径）：
 //!
 //! 1. `<工作目录>/plugins/fengyegf.rusto/models` —— 随包分发的离线模型；
-//! 2. 动态库自身位置推出的 `<插件目录>/models`（从 `/proc/self/maps` 读真实路径）——
-//!    安卓上宿主把插件解压到 app 私有目录、cwd 不是插件目录，靠这条兜住；
+//! 2. 动态库自身位置推出的 `<插件目录>/models`，以及再往上 1–2 层的 `models`
+//!    （从 `/proc/self/maps` 读真实路径）——宿主的工作目录不等于插件目录时，
+//!    靠这条兜住；
 //! 3. `<工作目录>/data/plugins/rusto/models` —— 历史下载落点；
 //! 4. `<工作目录>/models`；
 //! 5. rusto 自身缓存目录。
 //!
-//! 注意 cwd 在安卓上通常是 `/`：直接拼相对路径会得到 `/data/plugins/...`，那是
-//! 系统分区（`root:system` 0771），app uid 建不了子目录，`create_dir_all` 直接
-//! EACCES（os error 13）——所以候选目录必须包含「动态库自身位置」这条。
+//! 注意工作目录不一定是插件根（Linux 守护进程常常是 `/`）：直接拼相对路径会拼出
+//! `/data/plugins/...` 这种系统目录，`create_dir_all` 直接 EACCES——所以候选目录
+//! 必须包含「动态库自身位置」这条。
 //!
 //! 格式取舍：.mnn 优先。两种格式都由 `rusto-nn` 的纯 Rust 解析器读，
 //! 不需要打开 `rten` feature；性能基准与选型记录见提交历史。
 //!
-//! 下载：rusto 的下载器只认进程级环境变量 `RUSTO_MODELS_URL` 做前缀替换
-//! （`{值}/{asset_filename}`），且内置「文件名 → HF 路径」映射只覆盖 .rten，
-//! 因此这里把 `RUSTO_MODELS_URL` 设成 `{mirror|官方源}/{preset}` 后调
-//! `download_asset("det.mnn", 目标)`，得到
-//! `https://huggingface.co/byrizki/rusto-models/resolve/main/ppocrv6-tiny-int8/det.mnn`。
-//! 下载器内部用 curl / wget / powershell 子进程 + `.part` + `rename`（原子）；
-//! 本模块再套一层 staging 目录，三件套齐了才整体搬进目标目录，避免半套模型。
-//!
-//! 下载能力先探测：安卓用户态一般没有 curl / wget / powershell，探测不到就直报
-//! 「只能手动放模型」，不再去建 staging 目录（那里只会报误导性的权限错误）。
+//! 下载：自己用 ureq（纯 Rust + rustls）走 HTTPS，**不起** curl / wget / powershell
+//! 子进程——Linux 上不一定装了 curl / wget，起进程的下载器在精简环境里只会失败。
+//! URL 是 `{源}/{preset}/{det.mnn|rec.mnn|dict.txt}`：配置了 `mirror` 就只用它，
+//! 否则先试官方源 `https://huggingface.co/byrizki/rusto-models/resolve/main`，
+//! 连不上再试 `https://hf-mirror.com`（路径一致，国内一般可达）。下载先落
+//! `<模型目录>/<preset>/.staging/`，三件套齐了才整体搬进目标目录，避免半套模型。
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::time::Duration;
 
 use crate::core::config::PLUGIN_NAME;
 use crate::engine::{EngineConfig, EngineError};
@@ -63,18 +60,18 @@ pub const DATA_SUBDIR: &str = "data/plugins/rusto/models";
 /// 官方模型仓库根（与 rusto 内置常量一致）。
 pub const DEFAULT_MODELS_BASE: &str = "https://huggingface.co/byrizki/rusto-models/resolve/main";
 
+/// 官方源连不上时的备用镜像（路径与 HF 一致，国内一般可达）。
+pub const FALLBACK_MODELS_BASE: &str = "https://hf-mirror.com";
+
 /// 缺省预设名（与 `core::config::DEFAULT_MODEL` 一致）。
 pub const DEFAULT_PRESET: &str = "ppocrv6-tiny-int8";
 
 /// 动态库文件名里的 stem（与 `Cargo.toml` 的 `[lib] name = "rusto"` 一致）。
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 const LIB_STEM: &str = "rusto";
 
 /// 模型文件候选扩展名，按优先级（.mnn 快路径优先）。
 const MODEL_EXTS: [&str; 2] = ["mnn", "rten"];
-
-/// 串行化「写环境变量 + 下载」，避免两个线程同时改 `RUSTO_MODELS_URL`。
-static DOWNLOAD_LOCK: Mutex<()> = Mutex::new(());
 
 impl ModelPaths {
     /// 三个文件所在目录（错误信息与状态展示用）。
@@ -104,15 +101,30 @@ pub fn resolve(config: &EngineConfig) -> Result<ModelPaths, EngineError> {
             return Ok(paths);
         }
     }
-    let base = bases.first().cloned().unwrap_or_else(current_dir);
-    if let Some(reason) = download_blocker() {
+    let hint_target = bases
+        .first()
+        .cloned()
+        .unwrap_or_else(current_dir)
+        .join(&preset);
+    let Some(base) = pick_download_base(&bases) else {
         return Err(EngineError::ModelMissing(format!(
-            "找不到模型（预设 {preset}）：{}；{reason}；{}",
+            "找不到模型（预设 {preset}），候选目录都不可写：{}；{}",
             tried(&bases),
-            hint(&base.join(&preset))
+            hint(&hint_target)
         )));
-    }
+    };
     download(config, &preset, &base)
+}
+
+/// 选一个能写的目录当下载落点：按候选顺序试建目录，第一个成功的就是它。
+///
+/// cwd 指向系统目录时（例如守护进程从 `/` 启动），`/plugins/...` 这类候选必然建不
+/// 出来；能写的通常是插件目录，也就是动态库位置推出来的那几条。
+fn pick_download_base(bases: &[PathBuf]) -> Option<PathBuf> {
+    bases
+        .iter()
+        .find(|base| fs::create_dir_all(base).is_ok())
+        .cloned()
 }
 
 /// 已经试过的目录清单（错误信息用；最多列 6 个，避免刷屏）。
@@ -191,22 +203,33 @@ fn bundled_dirs(cwd: &Path) -> Vec<PathBuf> {
 
 /// 由动态库路径推出模型目录候选。
 ///
-/// 发行布局是 `<插件目录>/bin/librusto.so` + `<插件目录>/models/<preset>/`，所以
-/// 「动态库同级 `models`」与「上两级 `models`」都要看；bin 目录和插件目录本身也
-/// 当根，兼容把三件套直接摊在里面的部署。纯路径运算，不碰文件系统（便于单测）。
+/// 发行布局是 `<插件目录>/bin/librusto.so` + `<插件目录>/models/<preset>/`：插件目录
+/// 优先（宿主把插件解压到 app 私有目录，模型查找与下载落点都该在这里），再看动态库
+/// 同级，最后逐级向上两层（宿主也可能把模型集中放在上层）；每层都试 `<层>/models`
+/// 与这层本身，兼容三件套直接摊开的部署。纯路径运算，不碰文件系统（便于单测）。
 pub fn model_bases_of(lib: &Path) -> Vec<PathBuf> {
     let Some(bin) = lib.parent() else {
         return Vec::new();
     };
-    let mut bases = vec![bin.join("models"), bin.to_path_buf()];
+    let mut bases = Vec::new();
     if let Some(root) = bin.parent() {
         bases.push(root.join("models"));
         bases.push(root.to_path_buf());
+        if let Some(up) = root.parent() {
+            bases.push(up.join("models"));
+            bases.push(up.to_path_buf());
+            if let Some(top) = up.parent() {
+                bases.push(top.join("models"));
+                bases.push(top.to_path_buf());
+            }
+        }
     }
+    bases.push(bin.join("models"));
+    bases.push(bin.to_path_buf());
     bases
 }
 
-/// 动态库位置推出的模型目录候选（安卓的关键路径：cwd 不是插件目录）。
+/// 动态库位置推出的模型目录候选（cwd 不等于插件目录时靠它）。
 fn library_model_bases() -> Vec<PathBuf> {
     let mut bases = Vec::new();
     for lib in library_paths() {
@@ -217,9 +240,9 @@ fn library_model_bases() -> Vec<PathBuf> {
 
 /// 宿主 `dlopen` 进来的本插件动态库路径。
 ///
-/// 安卓上 `std::env::current_exe()` 指向 `app_process`，没法用来定位插件目录；
+/// `std::env::current_exe()` 在宿主进程里指向宿主自身，没法用来定位插件目录；
 /// `/proc/self/maps` 里能读到 `librusto.so` 被映射的真实路径。
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn library_paths() -> Vec<PathBuf> {
     let Ok(maps) = fs::read_to_string("/proc/self/maps") else {
         return Vec::new();
@@ -227,7 +250,7 @@ fn library_paths() -> Vec<PathBuf> {
     library_paths_from_maps(&maps, &library_file_name())
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(target_os = "linux"))]
 fn library_paths() -> Vec<PathBuf> {
     Vec::new()
 }
@@ -236,8 +259,8 @@ fn library_paths() -> Vec<PathBuf> {
 ///
 /// maps 行是「地址 权限 偏移 设备 inode 路径」，前五个字段里没有斜杠，
 /// 所以第一个斜杠就是路径起点（路径含空格也能整段取到）。抽成纯函数是为了
-/// 能在非 Linux 的构建机上用假 maps 验证安卓那条解析路径。
-#[cfg(any(target_os = "linux", target_os = "android", test))]
+/// 能在非 Linux 的构建机上用假 maps 验证这条解析路径。
+#[cfg(any(target_os = "linux", test))]
 fn library_paths_from_maps(maps: &str, name: &str) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for line in maps.lines() {
@@ -255,7 +278,7 @@ fn library_paths_from_maps(maps: &str, name: &str) -> Vec<PathBuf> {
 }
 
 /// 动态库文件名（与 `[lib] name` 拼出来的 `librusto.so`）。
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn library_file_name() -> String {
     format!("lib{LIB_STEM}.so")
 }
@@ -358,29 +381,20 @@ const DOWNLOAD_PLAN: [(&str, [&str; 3]); 2] = [
     ("rten", ["det.rten", "rec.rten", "dict.txt"]),
 ];
 
-/// 下载器依赖的本机命令（rusto 只会起这三个子进程）。
-const DOWNLOAD_TOOLS: [&str; 3] = ["curl", "wget", "powershell"];
-
-/// 自动下载受阻的原因；`None` = 环境里至少有一个可用的下载命令。
-fn download_blocker() -> Option<String> {
-    if DOWNLOAD_TOOLS.iter().any(|tool| command_exists(tool)) {
-        return None;
+/// 下载源顺序：配置了 `mirror` 就只用它；没配则官方源 + 备用镜像各试一遍。
+fn model_sources(config: &EngineConfig) -> Vec<String> {
+    if let Some(mirror) = config
+        .mirror
+        .as_deref()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        return vec![mirror.trim_end_matches('/').to_owned()];
     }
-    Some(if cfg!(target_os = "android") {
-        "安卓上没有 curl / wget / powershell，rusto 的下载器（起子进程）用不了，只能手动放模型"
-            .to_owned()
-    } else {
-        "系统里找不到 curl / wget / powershell，无法自动下载模型".to_owned()
-    })
-}
-
-/// PATH 里是否有这个可执行文件（Windows 额外认 `.exe`）。
-fn command_exists(name: &str) -> bool {
-    let Some(path) = std::env::var_os("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path)
-        .any(|dir| dir.join(name).is_file() || dir.join(format!("{name}.exe")).is_file())
+    vec![
+        DEFAULT_MODELS_BASE.to_owned(),
+        FALLBACK_MODELS_BASE.to_owned(),
+    ]
 }
 
 /// 下载三件套到 `<base>/<preset>/`（staging → 原子搬入）。
@@ -395,26 +409,11 @@ fn download(config: &EngineConfig, preset: &str, base: &Path) -> Result<ModelPat
         )));
     }
 
-    let _guard = DOWNLOAD_LOCK
-        .lock()
-        .map_err(|_| EngineError::Internal("模型下载锁中毒".to_owned()))?;
-
-    let mirror = config
-        .mirror
-        .as_deref()
-        .map(str::trim)
-        .filter(|text| !text.is_empty())
-        .unwrap_or(DEFAULT_MODELS_BASE)
-        .trim_end_matches('/')
-        .to_owned();
-
     let mut notes: Vec<String> = Vec::new();
     // 不做跨精度回退：ppocrv6-tiny 找不到时绝不自动换成 -int8（反之亦然），
     // 否则用户以为换了精度却拿到别的权重。
-    let candidates = [preset.to_owned()];
-
-    for candidate in &candidates {
-        let prefix = format!("{mirror}/{candidate}");
+    for source in model_sources(config) {
+        let prefix = format!("{source}/{preset}");
         for (format, files) in DOWNLOAD_PLAN {
             if let Err(error) = fetch_into(&prefix, &files, &staging) {
                 notes.push(format!("{prefix}/{} [{}] {error}", files[0], format));
@@ -436,19 +435,46 @@ fn download(config: &EngineConfig, preset: &str, base: &Path) -> Result<ModelPat
     )))
 }
 
-/// 用 rusto 的下载器把三个文件取到 staging。
+/// 用 ureq 把三个文件取到 staging（纯 Rust HTTPS，不依赖外部命令）。
 fn fetch_into(prefix: &str, files: &[&str; 3], staging: &Path) -> Result<(), String> {
-    // rusto 的下载器没有 per-call 源地址参数，只认进程级环境变量做前缀拼接：
-    // get_asset_download_urls() 在值不以斜杠结尾时拼成 “{值}/{asset_filename}”。
-    // SAFETY: 写环境变量在多线程进程里不安全（Rust 2024 起 set_var 为 unsafe）。
-    // 这里由 DOWNLOAD_LOCK 串行化，且只在「确实缺模型、即将下载」的冷路径上写。
-    unsafe { std::env::set_var("RUSTO_MODELS_URL", prefix) };
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(120))
+        .user_agent(concat!("fuyubot-plugin-rusto/", env!("CARGO_PKG_VERSION")))
+        .build();
     for name in files {
+        let url = format!("{prefix}/{name}");
         let target = staging.join(name);
         let _ = fs::remove_file(&target);
-        rusto::download::download_asset(name, &target).map_err(|error| error.to_string())?;
+        let response = agent.get(&url).call().map_err(describe)?;
+        let declared = response
+            .header("content-length")
+            .and_then(|text| text.trim().parse::<u64>().ok());
+        let mut reader = response.into_reader();
+        let mut file = fs::File::create(&target)
+            .map_err(|error| format!("建 {} 失败：{error}", target.display()))?;
+        let written = std::io::copy(&mut reader, &mut file)
+            .map_err(|error| format!("写 {} 失败：{error}", target.display()))?;
+        drop(file);
+        if written == 0 {
+            let _ = fs::remove_file(&target);
+            return Err(format!("{url} 返回空文件"));
+        }
+        if let Some(declared) = declared
+            && declared != written
+        {
+            let _ = fs::remove_file(&target);
+            return Err(format!("{url} 只收到 {written}/{declared} 字节"));
+        }
     }
     Ok(())
+}
+
+/// 把 ureq 的错误压成一句人话（服务器答了 vs 根本没连上）。
+fn describe(error: ureq::Error) -> String {
+    match error {
+        ureq::Error::Status(status, _response) => format!("HTTP {status}"),
+        ureq::Error::Transport(transport) => transport.to_string(),
+    }
 }
 
 /// 把 staging 里的文件搬到目标位置（同盘 rename；跨盘退回复制）。
@@ -627,20 +653,49 @@ mod tests {
     }
 
     #[test]
-    fn library_bases_cover_bin_and_plugin_root() {
+    fn library_bases_prefer_plugin_root() {
         let bases = model_bases_of(Path::new("/data/plugins/fengyegf.rusto/bin/librusto.so"));
+        assert_eq!(
+            bases[0],
+            PathBuf::from("/data/plugins/fengyegf.rusto/models")
+        );
         assert!(bases.contains(&PathBuf::from("/data/plugins/fengyegf.rusto/bin/models")));
-        assert!(bases.contains(&PathBuf::from("/data/plugins/fengyegf.rusto/models")));
+        assert!(bases.contains(&PathBuf::from("/data/plugins/fengyegf.rusto")));
     }
 
     #[test]
-    fn unknown_download_tool_is_not_found() {
-        assert!(!command_exists("rusto-no-such-download-tool"));
+    fn download_base_skips_unwritable_candidates() {
+        let temp = TempDir::new("download-base");
+        let blocker = temp.0.join("blocked");
+        fs::write(&blocker, b"x").expect("写占位文件");
+        let candidates = vec![
+            blocker.join("models"), // 祖先不是目录：create_dir_all 必然失败
+            temp.0.join("writable").join("models"),
+        ];
+        let base = pick_download_base(&candidates).expect("应选到可写目录");
+        assert_eq!(base, candidates[1]);
     }
 
     #[test]
-    fn android_maps_lines_yield_plugin_library() {
-        // 真实的安卓 maps 形态：同一个 .so 有多段映射，旁边还有无关的 .so 与匿名段。
+    fn model_sources_prefer_configured_mirror() {
+        assert_eq!(
+            model_sources(&config(None)),
+            vec![
+                DEFAULT_MODELS_BASE.to_owned(),
+                FALLBACK_MODELS_BASE.to_owned()
+            ]
+        );
+        let mut custom = config(None);
+        custom.mirror = Some(" https://hf-mirror.com/ ".to_owned());
+        assert_eq!(
+            model_sources(&custom),
+            vec!["https://hf-mirror.com".to_owned()]
+        );
+    }
+
+    #[test]
+    fn maps_lines_yield_plugin_library() {
+        // 真实 /proc/self/maps 的形态：同一个 .so 有多段映射，旁边还有无关的 .so 与匿名段。
         let maps = "\
 7c1a0000-7c1a1000 r--p 00000000 fd:00 1234 /data/data/com.example.fuyubot/files/plugins/fengyegf.rusto/bin/librusto.so
 7c1a1000-7c1a2000 r-xp 00010000 fd:00 1234 /data/data/com.example.fuyubot/files/plugins/fengyegf.rusto/bin/librusto.so

@@ -3,7 +3,7 @@
 # 一个 crate 两种库目标：cdylib 给宿主 dlopen，rlib 让 cargo test / examples 直接调内部模块。
 [package]
 name = "fuyubot-plugin-rusto"
-version = "0.1.4"
+version = "0.1.6"
 edition.workspace = true
 rust-version.workspace = true
 description = "RustO! 纯 Rust OCR：图片进、文本出，并作为 rusto.ocr 服务供其它插件联动"
@@ -23,6 +23,8 @@ thiserror.workspace = true
 # 入参 data（base64/DataURL）解码、图片尺寸探测与限幅缩放。
 image = { workspace = true, features = ["png", "jpeg", "gif", "webp"] }
 base64 = "0.22"
+# 模型自动下载：纯 Rust HTTPS（ureq + rustls），不依赖系统证书与外部命令。
+ureq.workspace = true
 # 引擎：纯 Rust MNN 运行时（rusto-nn）+ RapidOCR 前后处理。
 # default-features = false：不要 rten/webgpu/cuda/opencv 这些可选后端；
 # parallel 打开 rusto-nn 的并行 kernel。
