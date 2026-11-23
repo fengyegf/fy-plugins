@@ -29,9 +29,6 @@ responses_path = "/responses"
 messages_path = "/messages"
 models_path = "/models"
 
-# 追加到每个请求的自定义头，例如 { "X-Tenant" = "demo" }。
-[headers]
-
 # 插件层默认值（工具/服务在请求没带 model、max_tokens 时使用）。
 default_model = "deepseek-chat"
 default_max_tokens = 1024
@@ -39,3 +36,7 @@ default_max_tokens = 1024
 # 是否注册工具与共享服务（供宿主 / AI / 其它插件调用）。
 enable_tools = true
 enable_service = true
+
+# 追加到每个请求的自定义头，例如 { "X-Tenant" = "demo" }。
+# 注意：表头必须放最后——TOML 里表头之后的键都属于该表，放前面会把上面的插件键吞进 headers。
+[headers]

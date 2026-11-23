@@ -57,6 +57,8 @@ pub mod openai_chat;
 pub mod openai_responses;
 pub mod plugin;
 
+mod streaming;
+
 pub use api::{LlmClient, Protocol, ProtocolTest, RawStream, TestReport, value_to_pretty};
 pub use core::{
     AuthMode, ClientConfig, DEFAULT_ANTHROPIC_VERSION, DEFAULT_BASE_URL, LlmError, LlmResult,

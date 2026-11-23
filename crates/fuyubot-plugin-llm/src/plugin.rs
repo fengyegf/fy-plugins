@@ -24,6 +24,7 @@
 
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, c_char, c_void};
+use std::sync::Arc;
 
 use fuyubot_plugin_api::{
     HostApi, HostExt, Plugin, ServiceMethod, ServiceVTable, ToolHandle, define_plugin,
@@ -33,6 +34,7 @@ use serde_json::{Value, json};
 
 use crate::api::{LlmClient, Protocol};
 use crate::core::{ClientConfig, LlmError, LlmResult};
+use crate::streaming::StreamRegistry;
 
 /// 插件 id（与 `plugin.json` 一致）。
 pub const PLUGIN_ID: &str = "fengyegf.llm";
@@ -131,13 +133,22 @@ pub struct PluginState {
     pub config: PluginConfig,
     /// 统一协议客户端。
     pub client: LlmClient,
+    /// 事件发不出去时也不能影响读线程，所以把宿主复制一份给流式线程用。
+    pub host: HostApi,
+    /// 活跃的流式任务：`stream_id -> 取消位`。
+    pub streams: Arc<StreamRegistry>,
 }
 
 impl PluginState {
     /// 构造客户端（会校验 `base_url`）。
-    pub fn new(config: PluginConfig) -> LlmResult<Self> {
+    pub fn new(config: PluginConfig, host: HostApi) -> LlmResult<Self> {
         let client = LlmClient::new(config.client.clone())?;
-        Ok(Self { config, client })
+        Ok(Self {
+            config,
+            client,
+            host,
+            streams: Arc::new(StreamRegistry::new()),
+        })
     }
 
     /// 原始 JSON 直通：补齐默认 model / max_tokens 后发给指定协议。
@@ -206,14 +217,16 @@ impl PluginState {
                     "messages",
                     "models",
                     "test",
-                    "describe"
+                    "describe",
+                    "stream",
+                    "stream_cancel"
                 ]),
             );
         }
         value
     }
 
-    fn prepare(&self, protocol: Protocol, body: &Value) -> LlmResult<Value> {
+    pub(crate) fn prepare(&self, protocol: Protocol, body: &Value) -> LlmResult<Value> {
         if !self.config.client.has_api_key() {
             return Err(LlmError::Config(
                 "未配置 api_key：请在 [plugin.fengyegf.llm] 的 api_key 或环境变量 FUYUBOT_LLM_API_KEY 中设置"
@@ -279,6 +292,9 @@ fn execute(state: &PluginState, method: &str, input: &Value) -> Value {
         "chat" => state.dispatch(Protocol::OpenAiChat, input),
         "responses" => state.dispatch(Protocol::OpenAiResponses, input),
         "messages" => state.dispatch(Protocol::AnthropicMessages, input),
+        "stream" => crate::streaming::start(state, input),
+        "stream_poll" => crate::streaming::poll(state, input),
+        "stream_cancel" => crate::streaming::cancel(state, input),
         "models" => state.models(),
         "test" => {
             let model = input.get("model").and_then(Value::as_str);
@@ -413,6 +429,9 @@ impl GatewayService {
             "models",
             "test",
             "describe",
+            "stream",
+            "stream_poll",
+            "stream_cancel",
         ]
         .iter()
         .map(|name| CString::new(*name).expect("静态服务名合法"))
@@ -442,6 +461,18 @@ impl GatewayService {
             ServiceMethod {
                 name: names[6].as_ptr(),
                 func: Some(svc_describe),
+            },
+            ServiceMethod {
+                name: names[7].as_ptr(),
+                func: Some(svc_stream),
+            },
+            ServiceMethod {
+                name: names[8].as_ptr(),
+                func: Some(svc_stream_poll),
+            },
+            ServiceMethod {
+                name: names[9].as_ptr(),
+                func: Some(svc_stream_cancel),
             },
         ];
 
@@ -507,6 +538,21 @@ unsafe extern "C" fn svc_describe(context: *mut c_void, input: *const c_char) ->
     service_entry(context, input, "describe")
 }
 
+unsafe extern "C" fn svc_stream(context: *mut c_void, input: *const c_char) -> *const c_char {
+    service_entry(context, input, "stream")
+}
+
+unsafe extern "C" fn svc_stream_cancel(
+    context: *mut c_void,
+    input: *const c_char,
+) -> *const c_char {
+    service_entry(context, input, "stream_cancel")
+}
+
+unsafe extern "C" fn svc_stream_poll(context: *mut c_void, input: *const c_char) -> *const c_char {
+    service_entry(context, input, "stream_poll")
+}
+
 // ── 插件主体 ────────────────────────────────────────────────────────
 
 struct LlmPlugin {
@@ -534,7 +580,8 @@ impl Plugin for LlmPlugin {
             );
         }
 
-        let state = Box::new(PluginState::new(config).map_err(|error| error.to_string())?);
+        let state =
+            Box::new(PluginState::new(config, self.host).map_err(|error| error.to_string())?);
         let state_ptr = (&*state as *const PluginState).cast_mut().cast::<c_void>();
 
         if state.config.enable_tools {
@@ -568,6 +615,9 @@ impl Plugin for LlmPlugin {
 
     fn stop(&mut self) {
         // 先撤服务（VTable 指向 state），再释放 state。
+        if let Some(state) = &self.state {
+            state.streams.cancel_all();
+        }
         self.service = None;
         self.tools.clear();
         self.state = None;

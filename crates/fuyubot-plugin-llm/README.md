@@ -295,6 +295,25 @@ let value: serde_json::Value = serde_json::from_str(&raw)?;
 
 ### 插件依赖声明
 
+### 流式服务（stream / stream_poll / stream_cancel）
+
+`chat` 这类方法是同步 JSON（一次返回终稿），真流式单独一组方法：
+
+| 方法 | 入参 | 出参 |
+| --- | --- | --- |
+| `stream` | 同 `chat`（可选 `protocol`） | `{"ok":true,"stream_id":1,"protocol":"openai-chat"}`，立刻返回，读线程在后台读 SSE |
+| `stream_poll` | `{"stream_id":1,"cursor":0}` | `{"ok":true,"chunks":["你好", …],"cursor":3,"done":false,"error":null,"model":"…","usage":{…}}` |
+| `stream_cancel` | `{"stream_id":1}` | `{"ok":true,"cancelled":true}` |
+
+- 每次 `stream_poll` 只拿 `cursor` 之后的新块；`done` 为 true 后登记会被移除。
+- 错误走 `error: {code, message}`；`cancelled: true` 表示被 `stream_cancel` 或插件停止中断。
+- 为什么轮询而不是事件：服务契约只有同步 JSON 一种，跨插件不依赖 emit 作用域；
+  调用方自己掌握节奏（`fengyegf.agent` 默认 50ms 一轮）。
+- 工具（`fengyegf.llm.chat` 等）仍是同步的，传 `stream: true` 会被拒绝。
+
+调用方典型流程：`stream` 拿 id → 循环 `stream_poll` 拼 chunks → `done` 后自己落地
+（agent 是发 `sendMessage`）→ 用户点停止就 `stream_cancel`。
+
 其它插件要用共享服务时，按 FuyuBot 的分发包规范二选一：
 
 - 在对方 `plugin.json` 写 `"optional_depends": ["fengyegf.llm"]`（软依赖，只影响排序）；
