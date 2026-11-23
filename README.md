@@ -2,7 +2,7 @@
 
 ## 项目介绍
 
-fy-plugins 是一个 Cargo workspace，包含 10 个可独立构建、独立发布、独立加载的 FuyuBot 原生插件，
+fy-plugins 是一个 Cargo workspace，包含 11 个可独立构建、独立发布、独立加载的 FuyuBot 原生插件，
 全部用 Rust 编写（一个插件 = 一个 cdylib）。插件通过 FuyuBot 宿主的 Native ABI v6 导出符号与
 宿主通信，卡片类插件的界面统一交给宿主上的 `fuyubot.html2img` 服务渲染，插件自身不带渲染引擎。
 
@@ -61,7 +61,8 @@ plugins/<id>/
 | [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
 | [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.2 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
 | [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.5 | 桌面三平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
-| [`fengyegf.llm`](crates/fuyubot-plugin-llm/README.md) | LLM Gateway | 0.1.0 | 全平台 | — | 零 AI SDK 的三大协议网关（OpenAI Chat / Responses / Anthropic Messages），提供工具与服务 |
+| [`fengyegf.llm`](crates/fuyubot-plugin-llm/README.md) | LLM Gateway | 0.1.1 | 全平台 | — | 零 AI SDK 的三大协议网关（OpenAI Chat / Responses / Anthropic Messages），提供工具、服务与流式 stream/stream_poll |
+| [`fengyegf.agent`](crates/fuyubot-plugin-agent/README.md) | AI Agent | 0.1.0 | 全平台 | fengyegf.llm（软） | Telegram 侧 Agent 运行时：富草稿流式、公式适配、AI 话题标题、会话 7 天自动清理（0=永久）、失败重试与原因回传、会话 JSON 落盘 |
 
 平台口径：全平台 = `windows-x86_64` / `linux-x86_64` / `macos-aarch64` / `android-aarch64` /
 `android-x86_64`；桌面三平台 = 不含 Android。唯一来源是各 crate 的 `plugin.json`。

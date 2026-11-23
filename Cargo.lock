@@ -750,6 +750,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fuyubot-plugin-agent"
+version = "0.1.0"
+dependencies = [
+ "fuyubot-plugin-api",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fuyubot-plugin-api"
 version = "0.1.2"
 dependencies = [
@@ -790,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-llm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "fuyubot-plugin-api",
  "serde",
@@ -821,6 +831,7 @@ dependencies = [
  "encoding_rs",
  "fuyubot-plugin-api",
  "hatchzip-core",
+ "percent-encoding",
  "scraper",
  "serde",
  "serde_json",
@@ -847,7 +858,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-system"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "fuyubot-plugin-api",

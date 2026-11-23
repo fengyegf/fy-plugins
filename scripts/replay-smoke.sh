@@ -38,6 +38,7 @@ stage fengyegf.ppxfy     ppxfy     ppxfy.dll     bin/ppxfy.dll
 stage fengyegf.system    system    system.dll    bin/system.dll
 stage fengyegf.trending  trending  trending.dll  bin/trending.dll
 stage fengyegf.whois     whois     whois.dll     bin/whois.dll
+stage fengyegf.agent     agent     agent.dll     bin/agent.dll
 
 # html2img 是 epic / kfc / musiccard / system / trending / whois 的硬依赖（不在本仓），从宿主目录借一份；
 # fuyubot.mongo 是 ppxfy 的可选软依赖，一并带上，缺了也不影响启动。
