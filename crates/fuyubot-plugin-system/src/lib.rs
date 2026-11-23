@@ -16,6 +16,7 @@
 //!
 //! 线程模型见 [`host`] 模块文档：宿主回调只投递，业务线程里才做阻塞操作。
 
+pub mod api;
 pub mod cmd;
 pub mod core;
 pub mod help;
@@ -24,7 +25,7 @@ pub mod render;
 
 use std::path::PathBuf;
 
-use fuyubot_plugin_api::{HostApi, HostExt, Plugin, Subscription, define_plugin};
+use fuyubot_plugin_api::{HostApi, HostExt, Plugin, Subscription, ToolHandle, define_plugin};
 
 use crate::core::Config;
 use crate::host::worker::{Worker, on_update};
@@ -35,6 +36,10 @@ struct SystemPlugin {
     /// 订阅句柄**必须活着**：drop 的那一刻就退订。
     subscription: Option<Subscription>,
     worker: Option<Worker>,
+    /// 对外工具句柄（drop 即注销）。
+    tools: Vec<ToolHandle>,
+    /// 对外共享服务（VTable 指针指向它自己的堆缓冲）。
+    service: Option<api::SystemService>,
 }
 
 impl Plugin for SystemPlugin {
@@ -44,6 +49,8 @@ impl Plugin for SystemPlugin {
             host,
             subscription: None,
             worker: None,
+            tools: Vec::new(),
+            service: None,
         })
     }
 
@@ -67,12 +74,31 @@ impl Plugin for SystemPlugin {
 
         // 可选联动：把 `/system` 登记进宿主命令表；登记失败只记一条 warn。
         help::register(&self.host);
+
+        // 对外接口：工具（模型可见）+ 共享服务（其它插件可调）。
+        let service = api::SystemService::new();
+        let handle = self
+            .host
+            .provide_service_shared(api::SERVICE_NAME, service.vtable_ptr());
+        if handle.is_valid() {
+            self.service = Some(service);
+        } else {
+            self.host.warn("system: 注册共享服务 fengyegf.system 失败");
+        }
+        self.tools = api::register_tools(&self.host);
+        self.host.info(&format!(
+            "system: 对外接口就绪（工具 {} 个，服务 {}）",
+            self.tools.len(),
+            self.service.is_some()
+        ));
         Ok(())
     }
 
     fn stop(&mut self) {
         // 顺序要紧：先退订（不再有新回调），再停线程。
         self.subscription = None;
+        self.tools.clear();
+        self.service = None;
         self.worker = None;
         self.host.info("system: 已停止");
     }
