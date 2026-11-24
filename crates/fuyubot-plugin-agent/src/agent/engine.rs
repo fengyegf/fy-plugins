@@ -6,10 +6,12 @@
 //!    不留。否则下一次请求会看到一条"用户说了但没人回答"的孤立消息，模型容易把那句
 //!    当成还没处理完的指令重复回答。
 //! 2. **工具调用是一个内循环**：模型点了工具就同步执行（宿主 `call_tool_result`），
-//!    把结果回填上下文再问一次；`max_tool_rounds` 用尽后这一轮不再下发工具，逼它收口。
+//!    把结果回填上下文再问一次；内置轮数用尽后这一轮不再下发工具，逼它收口。
 //! 3. **循环模式靠文本收敛**：工具用完后仍只把上一轮 assistant 输出放回上下文，
 //!    再追加一条"继续推进 / 完成就回 DONE"的指令，最多 `max_turns` 轮；assistant 文本
 //!    以 DONE 结尾即停。这个约定是跨协议都成立的收敛信号。
+//! 4. **历史默认全量带**：会话里的消息全部进上下文；太长时用 `compress` 把历史压成
+//!    一份摘要（摘要以 system 消息注入），而不是在每轮悄悄裁掉最近 N 条。
 //!
 //! 网关调用是同步阻塞的，只能在 worker 线程 / 工具处理器里跑。
 
@@ -21,12 +23,14 @@ use serde_json::{Value, json};
 
 use crate::core::{
     AgentError, AgentResult, ChatKey, ChatMessage, Config, RunMode, TurnOutcome, TurnRequest,
+    consts,
 };
 use crate::session::SessionStore;
 
+use super::registry::Registry;
 use super::toolcall::{assistant_entries, result_entries};
 use super::tools::ToolCatalog;
-use super::{Completion, GatewayClient, PromptBuilder};
+use super::{ArtifactStore, Completion, GatewayClient, PromptBuilder, compact};
 
 /// 循环模式每轮追加的推进指令。
 const LOOP_NUDGE: &str = "继续推进；如果任务已完成，只回复 DONE。";
@@ -40,6 +44,10 @@ pub struct AgentEngine {
     host: HostApi,
     config: Arc<Config>,
     gateway: GatewayClient,
+    /// 插件注册进来的能力（工具目录每轮读它）。
+    registry: Arc<Registry>,
+    /// 长工具结果缓存（工具目录写、读取工具读）。
+    artifacts: Arc<ArtifactStore>,
 }
 
 /// 一次流式推理的结果。
@@ -67,15 +75,38 @@ struct TurnDraft {
     model: Option<String>,
 }
 
+/// 一次历史压缩的结果。
+#[derive(Debug, Clone)]
+pub struct Compression {
+    /// 会话 id。
+    pub session: String,
+    /// 压缩掉的消息条数。
+    pub removed: usize,
+    /// 生成的摘要。
+    pub summary: String,
+}
+
 impl AgentEngine {
     /// 建引擎。
-    pub fn new(host: HostApi, config: Arc<Config>) -> Self {
+    pub fn new(
+        host: HostApi,
+        config: Arc<Config>,
+        registry: Arc<Registry>,
+        artifacts: Arc<ArtifactStore>,
+    ) -> Self {
         let gateway = GatewayClient::new(host, &config);
         Self {
             host,
             config,
             gateway,
+            registry,
+            artifacts,
         }
+    }
+
+    /// 注册表条目数（describe / 诊断用）。
+    pub fn registry_count(&self) -> usize {
+        self.registry.len()
     }
 
     /// 配置。
@@ -93,18 +124,19 @@ impl AgentEngine {
         self.host
     }
 
-    /// 现查宿主工具表；关掉 `model_tools` 或宿主没有工具时返回 `None`。
+    /// 现查宿主工具表；宿主没有工具时返回 `None`。
     ///
     /// 不缓存：宿主工具表随插件热插拔变化，缓存住名字会让模型拿着已卸载的工具
     /// 去调（宿主回 `NoHandler`）。
     fn tool_catalog(&self) -> Option<ToolCatalog> {
-        if !self.config.model_tools {
-            return None;
-        }
         let catalog = ToolCatalog::load(
             &self.host,
             &self.config.tool_denylist,
-            self.config.tool_result_max_chars,
+            consts::TOOL_RESULT_MAX_CHARS,
+            true,
+            true,
+            &self.registry,
+            Arc::clone(&self.artifacts),
         );
         (!catalog.is_empty()).then_some(catalog)
     }
@@ -128,12 +160,18 @@ impl AgentEngine {
             .unwrap_or_default()
     }
 
-    /// 系统提示：自定义优先；始终按 `format_guide` 附加富消息语法说明。
+    /// 本次走插件共享服务的能力数（describe / 诊断用）。
+    pub fn service_tool_count(&self) -> usize {
+        self.tool_catalog()
+            .map(|catalog| catalog.service_count())
+            .unwrap_or(0)
+    }
+
+    /// 系统提示：自定义优先；始终附加富消息语法说明。
     fn prompt_builder(&self, custom: Option<&str>) -> PromptBuilder {
         match custom.map(str::trim).filter(|prompt| !prompt.is_empty()) {
             Some(prompt) => PromptBuilder {
-                system: super::prompt::with_guide(prompt, self.config.format_guide),
-                max_history: self.config.max_history,
+                system: super::prompt::with_guide(prompt),
             },
             None => PromptBuilder::from_config(&self.config),
         }
@@ -162,10 +200,11 @@ impl AgentEngine {
         };
 
         let builder = self.prompt_builder(request.system_prompt.as_deref());
-        let messages = builder.messages(&session.messages, user_text);
+        let messages = builder.messages(&session.messages, &session.summary, user_text);
         let model = request.model.as_deref();
-        let max_tokens = request.max_tokens.or(self.config.max_tokens);
-        let temperature = self.config.temperature;
+        let max_tokens = request.max_tokens;
+        // 采样温度不固定：交给网关默认值，Agent 不替用户「调手感」。
+        let temperature = None;
         let catalog = self.tool_catalog();
 
         let draft = match mode {
@@ -229,17 +268,51 @@ impl AgentEngine {
         max_tokens: Option<u32>,
     ) -> AgentResult<Completion> {
         let catalog = self.tool_catalog();
-        let (completion, _) = self.complete_with_tools(
-            catalog.as_ref(),
-            messages,
-            model,
-            max_tokens.or(self.config.max_tokens),
-            self.config.temperature,
-        )?;
+        let (completion, _) =
+            self.complete_with_tools(catalog.as_ref(), messages, model, max_tokens, None)?;
         Ok(completion)
     }
 
-    /// 带重试的同步调用：首轮 + retry_times 次重试（配置类错误不重试，重试也没用）。
+    /// 把会话历史压成一份摘要（类似 harness 的 compaction）。
+    ///
+    /// 流程：读会话 → 拼转录（已有摘要作为「先前摘要」并入）→ 一次不带工具的网关调用
+    /// → 用摘要替换历史（消息清空，摘要留在会话里，后续每轮自动注入）。
+    /// **失败不落盘**：压缩失败时原历史一条不动。
+    pub fn compress(&self, store: &SessionStore, key: &ChatKey) -> AgentResult<Compression> {
+        let Some(session) = store.load(key)? else {
+            return Err(AgentError::BadRequest(format!(
+                "会话 {} 不存在",
+                key.file_stem()
+            )));
+        };
+        if session.messages.is_empty() && session.summary.trim().is_empty() {
+            return Err(AgentError::BadRequest(
+                "当前会话没有可压缩的历史".to_owned(),
+            ));
+        }
+        let transcript = compact::transcript(&session.summary, &session.messages);
+        let messages = compact::request_messages(&transcript);
+        let completion = self.chat_with_retry(
+            messages,
+            None,
+            Some(consts::COMPACT_MAX_TOKENS),
+            Some(consts::COMPACT_TEMPERATURE),
+            None,
+        )?;
+        let summary = compact::normalize_summary(&completion.content);
+        if summary.is_empty() {
+            return Err(empty_completion(&completion));
+        }
+        let removed = session.messages.len();
+        store.apply_summary(key, &summary, removed)?;
+        Ok(Compression {
+            session: session.id,
+            removed,
+            summary,
+        })
+    }
+
+    /// 带重试的同步调用：首轮 + 内置重试次数（配置类错误不重试，重试也没用）。
     fn chat_with_retry(
         &self,
         messages: Vec<Value>,
@@ -256,15 +329,15 @@ impl AgentEngine {
             {
                 Ok(completion) => return Ok(completion),
                 Err(error) => {
-                    if attempt >= self.config.retry_times || !retryable(&error) {
+                    if attempt >= consts::RETRY_TIMES || !retryable(&error) {
                         return Err(error);
                     }
                     attempt += 1;
                     self.host.info(&format!(
                         "agent: 推理失败，第 {attempt}/{} 次重试：{error}",
-                        self.config.retry_times
+                        consts::RETRY_TIMES
                     ));
-                    std::thread::sleep(Duration::from_millis(self.config.retry_delay_ms));
+                    std::thread::sleep(Duration::from_millis(consts::RETRY_DELAY_MS));
                 }
             }
         }
@@ -272,7 +345,7 @@ impl AgentEngine {
 
     /// 带工具的一轮完成：模型要调工具就执行、回填，再问一次，直到它给出文本。
     ///
-    /// 返回（最终完成结果, 实际执行的工具调用次数）。`max_tool_rounds` 用尽后
+    /// 返回（最终完成结果, 实际执行的工具调用次数）。内置工具轮数用尽后
     /// **不再下发工具**再问一次：模型没有了工具，只能把结论写成文本。
     fn complete_with_tools(
         &self,
@@ -289,7 +362,7 @@ impl AgentEngine {
                 self.chat_with_retry(messages, model, max_tokens, temperature, None)?;
             return Ok((completion, 0));
         }
-        let limit = self.config.max_tool_rounds.max(1);
+        let limit = consts::MAX_TOOL_ROUNDS;
         let mut messages = messages;
         let mut used = 0u32;
         loop {
@@ -338,7 +411,7 @@ impl AgentEngine {
     ///
     /// - on_connected：网关流**连通后**回调（占位符放这里，而不是收到消息就发）；
     /// - sink 返回 false 表示调用方要求停止：取消网关流并带 cancelled = true 返回；
-    /// - 失败按 retry_times 重试：开流失败、或还没收到任何文本就出错时整轮重试；
+    /// - 失败按内置重试次数重试：开流失败、或还没收到任何文本就出错时整轮重试；
     ///   已经有部分文本后出错不再重试（避免重复回答），把已收到的部分交给调用方。
     pub fn run_stream(
         &self,
@@ -364,29 +437,29 @@ impl AgentEngine {
             None => store.ensure(&key, &session_title(user_text))?,
         };
         let builder = self.prompt_builder(request.system_prompt.as_deref());
-        let messages = builder.messages(&session.messages, user_text);
+        let messages = builder.messages(&session.messages, &session.summary, user_text);
         let model = request.model.as_deref();
-        let max_tokens = request.max_tokens.or(self.config.max_tokens);
+        let max_tokens = request.max_tokens;
         let body = self
             .gateway
             // 走到这里说明这一轮不带工具（带工具的分支在函数开头就回放了）。
-            .chat_body(messages, model, max_tokens, self.config.temperature, None);
-        let total = Duration::from_millis(self.config.stream_timeout_ms.max(1_000));
-        let idle = Duration::from_millis(self.config.stream_idle_timeout_ms.max(1_000));
-        let poll = Duration::from_millis(self.config.stream_poll_ms.max(10));
+            .chat_body(messages, model, max_tokens, None, None);
+        let total = Duration::from_millis(consts::STREAM_TIMEOUT_MS);
+        let idle = Duration::from_millis(consts::STREAM_IDLE_TIMEOUT_MS);
+        let poll = Duration::from_millis(consts::STREAM_POLL_MS);
         let mut attempt = 0u32;
 
         loop {
             let stream_id = match self.gateway.stream_chat(body.clone()) {
                 Ok(id) => id,
                 Err(error) => {
-                    if attempt < self.config.retry_times && retryable(&error) {
+                    if attempt < consts::RETRY_TIMES && retryable(&error) {
                         attempt += 1;
                         self.host.info(&format!(
                             "agent: 开流失败，第 {attempt}/{} 次重试：{error}",
-                            self.config.retry_times
+                            consts::RETRY_TIMES
                         ));
-                        std::thread::sleep(Duration::from_millis(self.config.retry_delay_ms));
+                        std::thread::sleep(Duration::from_millis(consts::RETRY_DELAY_MS));
                         continue;
                     }
                     return Err(error);
@@ -466,13 +539,13 @@ impl AgentEngine {
             }
             if let Some(reason) = error {
                 // 还没吐字就失败：整轮重试；已经有内容就不再重试（避免重复回答）。
-                if reply.trim().is_empty() && attempt < self.config.retry_times {
+                if reply.trim().is_empty() && attempt < consts::RETRY_TIMES {
                     attempt += 1;
                     self.host.info(&format!(
                         "agent: 流式中断且没有内容，第 {attempt}/{} 次重试：{reason}",
-                        self.config.retry_times
+                        consts::RETRY_TIMES
                     ));
-                    std::thread::sleep(Duration::from_millis(self.config.retry_delay_ms));
+                    std::thread::sleep(Duration::from_millis(consts::RETRY_DELAY_MS));
                     continue;
                 }
                 return Ok(StreamOutcome {
@@ -586,8 +659,7 @@ impl AgentEngine {
         on_connected();
         let outcome = self.run(store, request, RunMode::Single, 1)?;
         let mut reply = String::new();
-        for chunk in crate::core::chunk_text(&outcome.reply, self.config.stream_chunk_chars.max(1))
-        {
+        for chunk in crate::core::chunk_text(&outcome.reply, consts::STREAM_CHUNK_CHARS.max(1)) {
             reply.push_str(&chunk);
             if !sink(&chunk) {
                 return Ok(StreamOutcome {
@@ -629,7 +701,11 @@ fn resolve_key(store: &SessionStore, request: &TurnRequest) -> AgentResult<ChatK
 
 /// 会话标题：首条用户消息压平空白后取前 `TITLE_CHARS` 个字符。
 fn session_title(user_text: &str) -> String {
-    let plain = user_text.split_whitespace().collect::<Vec<_>>().join(" ");
+    // 引用块不是用户说的话，标题从用户原话开始取。
+    let plain = crate::core::strip_quote_block(user_text)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     let title: String = plain.chars().take(TITLE_CHARS).collect();
     let title = title.trim();
     if title.is_empty() {

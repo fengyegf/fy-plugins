@@ -165,6 +165,58 @@ impl ChatKind {
     }
 }
 
+/// 引用关系：这条消息在回复哪一条（TDLib `messageReplyToMessage` 的可读部分）。
+///
+/// 只有 id 和「用户手动选中的片段」在更新里；被引用消息的正文要另外问 TDLib
+/// （见 `td::message`），所以这里刻意不含正文。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ReplyRef {
+    /// 被引用消息的 id。
+    pub message_id: i64,
+    /// 被引用消息所在的 chat（跨群 / 跨话题引用才有，0 视为未知）。
+    pub chat_id: Option<i64>,
+    /// 用户手动选中的引用片段（整条引用时为空）。
+    pub quote: Option<String>,
+    /// 是否手动选择的部分引用。
+    pub is_manual: bool,
+}
+
+/// 被引用消息的作者。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuoteAuthor {
+    /// 本插件（bot 自己）先前发的消息。
+    Me,
+    /// 某位用户；值是展示名（查不到时是 user id）。
+    User(String),
+    /// 以群 / 频道身份发送的匿名管理员。
+    Chat,
+    /// 查不到的发送者（回放 / 已注销）。
+    Unknown,
+}
+
+impl QuoteAuthor {
+    /// 给模型看的作者标签。
+    pub fn label(&self) -> String {
+        match self {
+            Self::Me => "你（助手）".to_owned(),
+            Self::User(name) => name.clone(),
+            Self::Chat => "匿名管理员 / 频道".to_owned(),
+            Self::Unknown => "未知发送者".to_owned(),
+        }
+    }
+}
+
+/// 被引用消息的可读快照（TDLib 取回后折成这个结构，渲染见 `core::quote`）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuotedMessage {
+    pub message_id: i64,
+    pub author: QuoteAuthor,
+    /// 拍平后的正文；媒体消息退化成 `[messagePhoto]` 这样的占位。
+    pub text: String,
+    /// TDLib 内容类型（`messageText` / `messagePhoto` / `messageRichMessage` …）。
+    pub content_type: String,
+}
+
 /// 一条入站消息（`updateNewMessage` 解析结果）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncomingMessage {
@@ -184,8 +236,8 @@ pub struct IncomingMessage {
     pub content_type: String,
     /// 所在话题（`messageTopicForum`）。
     pub topic_id: Option<i32>,
-    /// 引用的消息 id。
-    pub reply_to_message_id: Option<i64>,
+    /// 引用关系（用户点了「回复」时才有）。
+    pub reply: Option<ReplyRef>,
     /// TDLib 消息时间戳（unix 秒）。
     pub date: u64,
 }
@@ -208,6 +260,11 @@ impl IncomingMessage {
         } else {
             self.text.clone()
         }
+    }
+
+    /// 引用消息的 id（没有引用返回 `None`）。
+    pub fn reply_to_message_id(&self) -> Option<i64> {
+        self.reply.as_ref().map(|reply| reply.message_id)
     }
 
     /// 解析 `/name@bot args`。

@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::core::{AgentError, AgentResult, ChatKey, ChatMessage, Config};
+use crate::core::{AgentError, AgentResult, ChatKey, ChatMessage, Config, consts};
 
 /// 临时文件序号：同一进程里并发写同一路径也不会撞名。
 static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -40,6 +40,15 @@ pub struct Session {
     pub updated_at: u64,
     #[serde(default)]
     pub messages: Vec<ChatMessage>,
+    /// 历史压缩后的摘要（空 = 没压缩过）。每轮请求会自动注入到系统提示之后。
+    #[serde(default)]
+    pub summary: String,
+    /// 上次压缩的时间（unix 秒）；0 = 没压缩过。
+    #[serde(default)]
+    pub compacted_at: u64,
+    /// 累计压缩掉的消息条数（状态展示 / 诊断用）。
+    #[serde(default)]
+    pub compacted_messages: usize,
     /// 预留：模型 / 元信息。
     #[serde(default)]
     pub meta: Value,
@@ -93,8 +102,8 @@ impl SessionStore {
         Ok(Self {
             dir,
             ttl_days: config.session_ttl_days,
-            max_sessions: config.session_max_sessions,
-            max_messages: config.session_max_messages,
+            max_sessions: consts::SESSION_MAX_SESSIONS,
+            max_messages: consts::SESSION_MAX_MESSAGES,
         })
     }
 
@@ -130,6 +139,9 @@ impl SessionStore {
             created_at: now,
             updated_at: now,
             messages: Vec::new(),
+            summary: String::new(),
+            compacted_at: 0,
+            compacted_messages: 0,
             meta: Value::Null,
         };
         self.write_session(&session)?;
@@ -140,7 +152,7 @@ impl SessionStore {
     pub fn append(&self, key: &ChatKey, messages: &[ChatMessage]) -> AgentResult<Session> {
         let mut session = self.ensure(key, "")?;
         session.messages.extend_from_slice(messages);
-        // 只保留最后 N 条：丢弃最旧的，越界保护在 0 配置上也成立。
+        // 只保留最后 N 条（内置上限）：丢弃最旧的；长期记忆靠 /agent compress。
         let limit = self.max_messages.max(1);
         if session.messages.len() > limit {
             let drop_count = session.messages.len() - limit;
@@ -155,8 +167,30 @@ impl SessionStore {
     pub fn reset(&self, key: &ChatKey) -> AgentResult<()> {
         let mut session = self.ensure(key, "")?;
         session.messages.clear();
+        session.summary.clear();
+        session.compacted_at = 0;
+        session.compacted_messages = 0;
         session.updated_at = crate::unix_now();
         self.write_session(&session)
+    }
+
+    /// 用压缩摘要替换会话历史：消息清空，摘要与统计留下。
+    ///
+    /// 先落盘再返回；写失败时调用方拿到错误，原文件保持旧内容（原子写）。
+    pub fn apply_summary(
+        &self,
+        key: &ChatKey,
+        summary: &str,
+        removed: usize,
+    ) -> AgentResult<Session> {
+        let mut session = self.ensure(key, "")?;
+        session.messages.clear();
+        session.summary = summary.trim().to_owned();
+        session.compacted_messages = session.compacted_messages.saturating_add(removed);
+        session.compacted_at = crate::unix_now();
+        session.updated_at = session.compacted_at;
+        self.write_session(&session)?;
+        Ok(session)
     }
 
     /// 删除会话文件；返回是否真的删了。

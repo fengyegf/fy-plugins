@@ -6,7 +6,7 @@
 
 use serde_json::Value;
 
-use crate::core::{ChatKind, IncomingMessage};
+use crate::core::{ChatKind, IncomingMessage, ReplyRef};
 
 /// 一条 `updateNewMessage` → [`IncomingMessage`]；其它更新 / 缺关键字段返回 `None`。
 pub(super) fn parse_incoming(update: &Value) -> Option<IncomingMessage> {
@@ -43,7 +43,7 @@ pub(super) fn parse_incoming(update: &Value) -> Option<IncomingMessage> {
         text: content.map(content_text).unwrap_or_default(),
         content_type,
         topic_id: topic_id(message),
-        reply_to_message_id: reply_to_id(message),
+        reply: reply_ref(message),
         date: message.get("date").and_then(Value::as_u64).unwrap_or(0),
     })
 }
@@ -79,15 +79,77 @@ fn topic_id(message: &Value) -> Option<i32> {
 }
 
 /// 引用关系：只认「回复某条消息」；故事 / 外部回复不参与本插件。
-fn reply_to_id(message: &Value) -> Option<i64> {
-    let reply = message.get("reply_to")?;
-    // 收到的更新里是 `messageReplyToMessage`，输入侧才是 `inputMessageReplyToMessage`；
-    // 两种写法都认（回放归档 / 夹具可能直接复用请求形状）。
-    let kind = reply.get("@type").and_then(Value::as_str)?;
-    if !matches!(kind, "messageReplyToMessage" | "inputMessageReplyToMessage") {
-        return None;
+///
+/// 更新里能拿到的只有 id（+ 跨群引用时的 chat_id）和用户手动选中的片段；
+/// 被引用消息的正文由 `td::message` 另外取（`getRepliedMessage` / `getMessage`）。
+fn reply_ref(message: &Value) -> Option<ReplyRef> {
+    if let Some(reply) = message.get("reply_to") {
+        match reply.get("@type").and_then(Value::as_str) {
+            // 收到的更新里是 `messageReplyToMessage`，输入侧才是 `inputMessageReplyToMessage`；
+            // 两种写法都认（回放归档 / 夹具可能直接复用请求形状）。
+            Some("messageReplyToMessage") | Some("inputMessageReplyToMessage") => {
+                // message_id = 0 表示「不知道回复的是哪条」（TDLib 文档允许），当没有引用处理。
+                let message_id = reply
+                    .get("message_id")
+                    .and_then(Value::as_i64)
+                    .filter(|id| *id > 0)?;
+                let quote = reply.get("quote");
+                return Some(ReplyRef {
+                    message_id,
+                    // chat_id = 0 表示被引用消息所在 chat 未知：调用方退回当前 chat。
+                    chat_id: reply
+                        .get("chat_id")
+                        .and_then(Value::as_i64)
+                        .filter(|id| *id != 0),
+                    quote: quote.and_then(quote_text),
+                    is_manual: quote
+                        .and_then(|quote| quote.get("is_manual"))
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                });
+            }
+            // 故事回复不参与本插件（没有可读正文，也不该进模型上下文）。
+            Some("messageReplyToStory") => return None,
+            // 未知形状：可能是老版本 / 新版本新增的引用类型，继续看扁平字段。
+            _ => {}
+        }
     }
-    reply.get("message_id").and_then(Value::as_i64)
+    // 老 TDLib：消息上直接带一个扁平的 `reply_to_message_id`。
+    let message_id = message
+        .get("reply_to_message_id")
+        .and_then(Value::as_i64)
+        .filter(|id| *id > 0)?;
+    Some(ReplyRef {
+        message_id,
+        chat_id: None,
+        quote: None,
+        is_manual: false,
+    })
+}
+
+/// `TextQuote` 的文本。
+///
+/// 1.8.70 的 `textQuote` 同时有 `text: formattedText` 和 `rich_texts: vector<RichText>`：
+/// 手动选中**带格式**的片段时 TDLib 只填 `rich_texts`，`text` 是空串——只看 `text`
+/// 会把用户选的片段整段丢掉（真机上就是这样：引用块只剩一个 id）。
+fn quote_text(quote: &Value) -> Option<String> {
+    let plain = quote.get("text").and_then(|text| {
+        text.as_str()
+            .map(str::to_owned)
+            .or_else(|| text.get("text").and_then(Value::as_str).map(str::to_owned))
+    });
+    if let Some(plain) = plain.filter(|text| !text.trim().is_empty()) {
+        return Some(plain);
+    }
+    // 富文本形态：把 RichText 树拍平（粗体 / 斜体这些壳子直接穿透）。
+    let text: String = quote
+        .get("rich_texts")
+        .and_then(Value::as_array)?
+        .iter()
+        .map(super::message::rich_text)
+        .collect();
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_owned())
 }
 
 /// 正文：文本消息取 `text`，媒体取 `caption`，其余为空。

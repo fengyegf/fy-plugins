@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::PluginState;
-use crate::core::{AgentError, AgentResult};
+use crate::core::{AgentError, AgentResult, consts};
 use fuyubot_plugin_api::HostExt;
 
 use super::{clean, parse_args};
@@ -77,17 +77,13 @@ pub fn handle(state: &PluginState, input: &Value) -> AgentResult<Value> {
     let args: SendArgs = parse_args(input)?;
     let chat_id = args.chat_id()?;
     let plain = args.plain()?;
-    let timeout = state.config.send_timeout_ms;
+    let timeout = consts::SEND_TIMEOUT_MS;
     let topic_id = args.topic_id;
     let reply_to = args.reply_to;
 
     let sent = match args.markdown() {
         Some(markdown) => {
-            let rich_markdown = if state.config.normalize_math {
-                crate::core::normalize_math(markdown)
-            } else {
-                markdown.to_owned()
-            };
+            let rich_markdown = crate::core::normalize_math(markdown);
             match state
                 .td
                 .send_rich(chat_id, topic_id, &rich_markdown, reply_to, timeout)

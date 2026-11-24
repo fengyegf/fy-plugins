@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use super::{clean, parse_args};
 use crate::PluginState;
-use crate::core::{AgentError, AgentResult, ChatKey};
+use crate::core::{AgentError, AgentResult, ChatKey, consts};
 
 /// 工具名。
 pub const NAME: &str = "fengyegf.agent.title";
@@ -59,11 +59,11 @@ pub fn handle(state: &PluginState, input: &Value) -> AgentResult<Value> {
     let (chat_id, topic_id, title) = args.check()?;
     let limited: String = title
         .chars()
-        .take(state.config.topic_title_max_chars.max(4))
+        .take(consts::TOPIC_TITLE_MAX_CHARS.max(4))
         .collect();
     state
         .td
-        .edit_topic(chat_id, topic_id, &limited, state.config.action_timeout_ms)?;
+        .edit_topic(chat_id, topic_id, &limited, consts::ACTION_TIMEOUT_MS)?;
     let session_updated = state
         .store
         .rename(&ChatKey::new(chat_id, Some(topic_id)), &limited)

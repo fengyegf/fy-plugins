@@ -1,4 +1,4 @@
-//! `fengyegf.agent.session`：会话管理（list / get / reset / delete / create）。
+//! `fengyegf.agent.session`：会话管理（list / get / reset / delete / create / compress）。
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -13,14 +13,15 @@ use super::parse_args;
 pub const NAME: &str = "fengyegf.agent.session";
 
 /// 工具说明（注册到宿主工具表）。
-pub const DESCRIPTION: &str = "管理会话：list / get / reset / delete / create。";
+pub const DESCRIPTION: &str =
+    "管理会话：list / get / reset / delete / create / compress（compress = 把历史压成摘要）。";
 
 /// 入参 schema。
 pub fn schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "action": { "type": "string", "enum": ["list", "get", "reset", "delete", "create"] },
+            "action": { "type": "string", "enum": ["list", "get", "reset", "delete", "create", "compress"] },
             "chat_id": { "type": "integer" },
             "topic_id": { "type": "integer" },
             "id": { "type": "string" },
@@ -54,6 +55,7 @@ enum SessionAction {
     Reset,
     Delete,
     Create,
+    Compress,
 }
 
 impl SessionArgs {
@@ -70,11 +72,12 @@ impl SessionArgs {
             Some("reset") => Ok(SessionAction::Reset),
             Some("delete") => Ok(SessionAction::Delete),
             Some("create") => Ok(SessionAction::Create),
+            Some("compress") | Some("compact") | Some("summarize") => Ok(SessionAction::Compress),
             Some(other) => Err(AgentError::BadRequest(format!(
-                "未知 session action：{other}（只认 list / get / reset / delete / create）"
+                "未知 session action：{other}（只认 list / get / reset / delete / create / compress）"
             ))),
             None => Err(AgentError::BadRequest(
-                "缺少 action（list / get / reset / delete / create）".to_owned(),
+                "缺少 action（list / get / reset / delete / create / compress）".to_owned(),
             )),
         }
     }
@@ -84,7 +87,7 @@ impl SessionArgs {
     }
 }
 
-/// 处理：list / get / reset / delete / create。
+/// 处理：list / get / reset / delete / create / compress。
 pub fn handle(state: &PluginState, input: &Value) -> AgentResult<Value> {
     let args: SessionArgs = parse_args(input)?;
     let action = args.action()?;
@@ -129,6 +132,16 @@ pub fn handle(state: &PluginState, input: &Value) -> AgentResult<Value> {
             let title = if title.is_empty() { "AI 会话" } else { title };
             let session = store.ensure(&key, title)?;
             Ok(json!({ "ok": true, "session": session_json(&session)? }))
+        }
+        SessionAction::Compress => {
+            let key = resolve_key(store, &args)?;
+            let compression = state.engine.compress(store, &key)?;
+            Ok(json!({
+                "ok": true,
+                "session": compression.session,
+                "removed": compression.removed,
+                "summary": compression.summary,
+            }))
         }
     }
 }

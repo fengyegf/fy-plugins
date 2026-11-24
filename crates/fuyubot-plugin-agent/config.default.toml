@@ -1,38 +1,24 @@
 # fengyegf.agent 的默认配置（最低优先级）。
 # 用户在自己的 fuyubot.toml 的 [plugin.fengyegf.agent] 段里覆盖这些键。
-# 本插件不自己发 HTTP：全部推理都经共享服务 fengyegf.llm 转发。
+#
+# 设计：Agent 的行为尽量确定，只保留「部署时真的会不同」的开关。
+#   · 会话历史默认全部带上，没有「每次带几条」这种旋钮；
+#   · 上下文太长用 /agent compress：让模型把历史压成摘要，之后继续聊；
+#   · 同一会话 600ms 内的连发消息自动合并成一次请求，只回答最后一条；
+#   · 超过 4000 字的工具结果自动分页：模型可按页翻阅，或按 JSON 字段只取需要的部分；
+#   · 流式、超时、工具轮数、截断长度等都是内置常量，调不了也不用调。
+#
+# 硬依赖：fengyegf.llm（网关）。没装 llm 插件时本插件停在 Pending。
 
 # 总开关。关掉 = 不订阅、不注册工具/服务（插件仍在，可被 plugin list 看到）。
 enabled = true
 
-# LLM 网关（软依赖）。服务不存在 / 请求失败时按 retry_* 重试，最终回 failure_text。
-gateway_service = "fengyegf.llm"
 # 走网关的哪个方法：chat（OpenAI Chat Completions）/ messages（Anthropic）/ responses。
 gateway_method = "chat"
 # 空 = 用网关配置里的 default_model。
 model = ""
 # 系统提示词。留空则不注入 system 消息。
 system_prompt = "你是运行在 Telegram 里的 AI Agent。回答简洁、可执行；需要排版时用 Markdown。"
-# 在系统提示后附加「Telegram 富消息支持的 Markdown 语法」说明，让模型用对的写法写公式 / 表格等。
-format_guide = true
-max_history = 20
-# 空 = 用网关默认 max_tokens。
-max_tokens = 1024
-# 采样温度；留空则不下发该字段。
-temperature = 0.6
-
-# 工具调用：把宿主工具表（全部工具）按当前协议下发给模型，模型点了就同步执行，
-# 结果回填上下文再问一次。走网关的 chat / messages / responses 都支持。
-# 关掉 = 纯文本对话（也不再下发任何工具）。
-model_tools = true
-# 模型连续调用工具的最大轮数；用尽后再问一次且不再下发工具，逼它给结论。
-max_tool_rounds = 4
-# 额外不下发给模型的工具名：精确名，或以 * 结尾的前缀（如 "fengyegf.agent.run"、"my.plugin.*"）。
-# 只能追加：fuyubot.td.functions 是内置屏蔽（原始 TDLib 调用，schema 巨大、会把上下文撑爆），
-# 这里留空或删掉都不会解除；注意 fengyegf.agent.* 系列会让模型反过来调本插件（可能套娃）。
-tool_denylist = []
-# 单个工具结果回填给模型的最大字符数，超出截断。
-tool_result_max_chars = 4000
 
 # 回复形态：plain（纯文本）/ markdown（本地 parseTextEntities）/ rich（富消息，失败自动降级 markdown）。
 # 默认 rich：终稿走 inputMessageRichMessage（Bot API 富文本），失败逐级降级。
@@ -41,33 +27,6 @@ reply_mode = "rich"
 # 之后同一 draft_id 反复 sendTextMessageDraft 呈现流式，最后 sendMessage 落一条正式消息。
 # 群聊不支持草稿，直接发终稿。
 stream_replies = true
-# 流式草稿每次追加的字符数 / 间隔（毫秒）/ 总时长上限（秒）。
-stream_chunk_chars = 30
-# 草稿更新间隔（毫秒）：最小按 100 生效。调大更省请求（防 429），调小更跟手。
-stream_interval_ms = 200
-stream_max_seconds = 6
-# 是否显示「停止生成」按钮；用户点停止会收到 updateStopMessageDraft，插件立即停流。
-stream_can_stop = true
-# 流式草稿也用富消息（sendRichMessageDraft）；false 退回空文本草稿。
-rich_drafts = true
-# 富消息前把 LaTeX 公式归一成宿主认识的写法：
-# 反斜杠括号 → 行内 $...$；反斜杠方括号与单行 $$...$$ → 独立 $$ 块；
-# 围栏 math/latex/tex 也转成 $$ 块；普通代码围栏里的内容不动。
-normalize_math = true
-# 富草稿里「思考块」（inputPageBlockThinking）的文案。
-thinking_text = "Thinking…"
-# 网关支持流式（服务方法 stream + 事件 fengyegf.llm.stream）时，私聊用真 token 流更新草稿；
-# 网关不在 / 不支持时自动退回「拿到终稿后分块回放」。
-gateway_stream = true
-# 流式总超时 / 两次增量之间最多等多久（毫秒）。
-stream_timeout_ms = 120000
-stream_idle_timeout_ms = 30000
-# 流式轮询间隔（毫秒）：越小越跟手，调用越频繁。
-stream_poll_ms = 50
-
-# TDLib 调用超时。
-send_timeout_ms = 30000
-action_timeout_ms = 15000
 
 # 会话准入。
 allow_private = true
@@ -78,45 +37,17 @@ group_require_mention = true
 allow_bots = false
 # 允许对话的对端 bot 用户名（不带 @）；allow_bots = true 时生效，空 = 只按 allow_bots 放行。
 bot_allowlist = []
-# 单个会话里 bot 之间最多连续往返轮数，超过就停（防死循环）。
-bot_max_depth = 2
-# 同一对端 bot 的最小回复间隔（秒）。
-bot_rate_limit_secs = 5
 
-# 通用防环：同一条消息的去重窗口（人类消息只去重、不做限速——怕把用户真正要问的话丢掉）。
-dedupe_window_secs = 30
+# 额外不下发给模型的工具名：精确名，或以 * 结尾的前缀（如 "my.plugin.*"）。
+# 只能追加：fuyubot.td.functions 是内置屏蔽（原始 TDLib 调用，schema 巨大），删掉也不会解除；
+# 注意 fengyegf.agent.* 系列会让模型反过来调本插件（可能套娃）。
+tool_denylist = []
 
 # 私聊话题：首条消息自动开一个话题（TDLib createForumTopic，需要 bot 开了 topics）。
 topic_auto_create = true
-# 话题标题取首条消息的前 N 个字符。
-topic_title_max_chars = 24
-# 新对话首次聊天时，把话题标题设成首条消息内容（不额外调用模型；AI 想改名可调工具 fengyegf.agent.title）。
-topic_title_auto = true
-# 话题图标颜色（Telegram 只认这六个值）。
-topic_icon_color = 7321584
 
 # 会话落盘目录；空 = data/plugins/fengyegf.agent/sessions（相对宿主工作目录）。
 session_dir = ""
-session_max_sessions = 500
-session_max_messages = 200
 # 会话自动清理：超过这个天数没有活动的会话会被删除（插件启动时 + 每小时检查一次）。
-# 0 = 永久保留，不再自动删除（也不再按 session_max_sessions 修剪）。
+# 0 = 永久保留，不再自动删除（也不再按数量修剪）。
 session_ttl_days = 7
-
-# 对外接口。
-commands = true
-tools = true
-service = true
-
-# 网关不可用 / 未配置 key 时的兜底回复模板；{text} 会被换成用户原文。
-# 请求失败时的重试与最终文案。
-# retry_times：首次失败后的重试次数（0 = 不重试；总共尝试 retry_times + 1 次）。
-retry_times = 5
-# 两次重试之间的等待（毫秒）。
-retry_delay_ms = 800
-# 重试耗尽后发给用户的文案：{times} = 重试次数，{error} = 失败原因。
-failure_text = "请求失败：{error}"
-# 单条回复的字符上限，超过截断（Telegram 单条 4096）。
-max_reply_chars = 3500
-# 循环模式（RunMode::Loop）默认最多迭代轮数。
-loop_max_turns = 3

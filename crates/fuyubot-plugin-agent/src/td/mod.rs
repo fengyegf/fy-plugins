@@ -18,18 +18,30 @@ use std::sync::{Arc, Mutex};
 use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::{Value, json};
 
-use crate::core::{AgentError, AgentResult, ChatKey, IncomingMessage};
+use crate::core::{AgentError, AgentResult, ChatKey, IncomingMessage, QuotedMessage};
 
 mod draft;
 mod identity;
+mod message;
 mod send;
 mod topic;
 mod update;
 
 pub use draft::DraftSend;
 
-/// 合成请求号起点（与宿主约定一致：>= 1 << 48 表示离线回放）。
-const OFFLINE_REQUEST_BASE: u64 = 1 << 48;
+/// 宿主的请求号分三档（见宿主 `fuyubot-loader` 的 runtime.rs）：
+///
+/// - **TDLib 自己的号**：小号（TDLib 的 `@extra`），在线，响应照常回投；
+/// - **合成号**：`[1 << 48, 1 << 49)`——没接 TDLib（`--no-tdlib` / `--replay`）时用，
+///   请求只留档，**永远不会有响应**，等下去只是白等到超时；
+/// - **simplify 操作号**：`>= 1 << 49`——`send_message` / `edit_message_text` /
+///   `delete_messages` / `invoke` 这些 op 的回投地址，**在线**，结果走 `response` 通道。
+///
+/// 之前只判 `>= 1 << 48`，把 simplify 操作号也当成了「离线」：于是每个 op 发出去之后
+/// 立刻返回 `Ok(None)`，TDLib 的应答全被丢掉——消息照发，但拿不到消息号、查不到被引用
+/// 消息（回复引用就是这个症状）、建话题只拿到占位号、也发现不了发送失败。
+const SYNTHETIC_REQUEST_BASE: u64 = 1 << 48;
+const SIMPLIFY_REQUEST_BASE: u64 = 1 << 49;
 
 /// 等响应时在操作自己的 `timeout_ms` 之上多给的余量：宿主要先等 TDLib，再回投响应。
 const WAIT_MARGIN_MS: u64 = 5_000;
@@ -111,9 +123,11 @@ impl TdClient {
         self.host
     }
 
-    /// 合成请求号 = 离线回放。
+    /// 这个请求号是不是「离线合成号」（没接 TDLib，不会有响应）。
+    ///
+    /// simplify 的操作号比合成号更高一档，是在线请求，不能当离线短路掉。
     pub fn is_offline_request(request_id: u64) -> bool {
-        request_id >= OFFLINE_REQUEST_BASE
+        (SYNTHETIC_REQUEST_BASE..SIMPLIFY_REQUEST_BASE).contains(&request_id)
     }
 
     /// 发文本（`parse_mode` = None / markdown / html）。
@@ -253,6 +267,13 @@ impl TdClient {
     /// 解析 `updateNewMessage`（纯函数，可单测）。
     pub fn parse_incoming(update: &Value) -> Option<IncomingMessage> {
         update::parse_incoming(update)
+    }
+
+    /// 取被引用的消息（用户点了「回复」时才有）：正文 + 作者 + 内容类型。
+    ///
+    /// 只在 worker 线程调用（同步等应答）；取不到返回 `Ok(None)`，由上层只留引用标记。
+    pub fn quoted_message(&self, message: &IncomingMessage) -> AgentResult<Option<QuotedMessage>> {
+        message::replied(self, message)
     }
 
     /// 这个会话当前是否已有话题（bot 私聊 topics）。

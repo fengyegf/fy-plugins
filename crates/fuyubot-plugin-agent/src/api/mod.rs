@@ -7,7 +7,7 @@
 //! ## 工具在哪
 //!
 //! 每个工具一个文件，放在 [`tools`] 下：`chat.rs` / `run.rs` / `send.rs` /
-//! `session.rs` / `title.rs`。每个模块自带 `NAME` / `DESCRIPTION` / `schema()` / `handle()`，
+//! `session.rs` / `title.rs` / `result.rs`。每个模块自带 `NAME` / `DESCRIPTION` / `schema()` / `handle()`，
 //! 本文件只负责注册（把三者交给宿主）、按方法名分发和 FFI 边界。
 //!
 //! ## 统一契约
@@ -36,20 +36,31 @@ use fuyubot_plugin_api::{
 use serde_json::{Value, json};
 
 use crate::PluginState;
-use crate::core::{AgentError, AgentResult};
+use crate::agent;
+use crate::core::{AgentError, AgentResult, consts};
 
 mod tools;
 
 /// 共享服务名。
 pub const SERVICE_NAME: &str = "fengyegf.agent";
 /// 服务方法名（顺序与 VTable 里的 methods 一致）。
-const SERVICE_METHODS: [&str; 6] = ["describe", "chat", "run", "send", "session", "title"];
+const SERVICE_METHODS: [&str; 9] = [
+    "describe",
+    "chat",
+    "run",
+    "send",
+    "session",
+    "title",
+    "register",
+    "unregister",
+    "registry",
+];
 
 /// 注册工具；返回句柄（无效句柄已被宿主拒绝，这里照收）。
 pub fn register_tools(host: &HostApi, state: *const PluginState) -> Vec<ToolHandle> {
     let user_data = state.cast_mut().cast::<c_void>();
     // 顺序 = 注册顺序；名字 / 描述 / schema 都在各自的模块里。
-    let tools: [(&str, &str, Value, ToolHandlerFn); 5] = [
+    let tools: [(&str, &str, Value, ToolHandlerFn); 6] = [
         (
             tools::chat::NAME,
             tools::chat::DESCRIPTION,
@@ -79,6 +90,12 @@ pub fn register_tools(host: &HostApi, state: *const PluginState) -> Vec<ToolHand
             tools::title::DESCRIPTION,
             tools::title::schema(),
             tool_title,
+        ),
+        (
+            tools::result::NAME,
+            tools::result::DESCRIPTION,
+            tools::result::schema(),
+            tool_result,
         ),
     ];
 
@@ -131,13 +148,16 @@ impl AgentService {
             .chain(SERVICE_METHODS)
             .map(|name| CString::new(name).expect("静态服务名合法"))
             .collect();
-        let funcs: [unsafe extern "C" fn(*mut c_void, *const c_char) -> *const c_char; 6] = [
+        let funcs: [unsafe extern "C" fn(*mut c_void, *const c_char) -> *const c_char; 9] = [
             svc_describe,
             svc_chat,
             svc_run,
             svc_send,
             svc_session,
             svc_title,
+            svc_register,
+            svc_unregister,
+            svc_registry,
         ];
         let methods: Vec<ServiceMethod> = funcs
             .iter()
@@ -179,6 +199,11 @@ fn execute(state: &PluginState, method: &str, input: &Value) -> Value {
         "send" => tools::send::handle(state, input),
         "session" => tools::session::handle(state, input),
         "title" => tools::title::handle(state, input),
+        "result" => tools::result::handle(state, input),
+        // 能力注册表：提供方在自己的 start() 里调一次 register 即可。
+        "register" => register_capability(state, input),
+        "unregister" => unregister_capability(state, input),
+        "registry" => Ok(registry_snapshot(state)),
         other => Err(AgentError::BadRequest(format!("未知方法：{other}"))),
     };
     match result {
@@ -188,14 +213,67 @@ fn execute(state: &PluginState, method: &str, input: &Value) -> Value {
 }
 
 /// 自描述：给 AI / 面板 / 诊断用的能力与配置快照（不发网络请求、不碰 TDLib）。
+/// register：提供方把自己的能力登记进 agent 的能力注册表。
+///
+/// 入参见 agent::registry 的模块文档；owner 由宿主按调用方判定（ABI v6 的
+/// call_service 会带调用者身份），agent 只记录、不替谁站台。
+fn register_capability(state: &PluginState, input: &Value) -> AgentResult<Value> {
+    let registration = agent::Registration::from_value(input)
+        .map_err(AgentError::BadRequest)?
+        .with_owner(state.host.current_plugin());
+    state
+        .registry
+        .register(registration.clone())
+        .map_err(AgentError::BadRequest)?;
+    Ok(json!({
+        "ok": true,
+        "name": registration.name,
+        "service": registration.service,
+        "capability": registration.capability,
+        "owner": registration.owner,
+    }))
+}
+
+/// unregister：注销自己登记的能力（只有登记方能注销）。
+fn unregister_capability(state: &PluginState, input: &Value) -> AgentResult<Value> {
+    let name = input
+        .get("name")
+        .or_else(|| input.get("capability"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| AgentError::BadRequest("unregister 需要 name".to_owned()))?;
+    let removed = state
+        .registry
+        .unregister(
+            name,
+            state.host.current_plugin().as_deref(),
+            crate::PLUGIN_ID,
+        )
+        .map_err(AgentError::BadRequest)?;
+    Ok(json!({ "ok": true, "name": name, "removed": removed }))
+}
+
+/// registry：当前注册表快照（诊断 / 其它插件自检用）。
+fn registry_snapshot(state: &PluginState) -> Value {
+    let capabilities: Vec<Value> = state
+        .registry
+        .snapshot()
+        .iter()
+        .map(agent::Registration::to_json)
+        .collect();
+    json!({ "ok": true, "count": capabilities.len(), "capabilities": capabilities })
+}
+
 fn describe(state: &PluginState) -> Value {
     let config = &state.config;
+    let artifacts = state.artifacts.stats();
     json!({
         "ok": true,
         "plugin": crate::PLUGIN_ID,
         "version": env!("CARGO_PKG_VERSION"),
         "gateway": {
-            "service": config.gateway_service,
+            "service": consts::GATEWAY_SERVICE,
             "method": config.gateway_method,
             "available": gateway_available(state),
         },
@@ -203,18 +281,34 @@ fn describe(state: &PluginState) -> Value {
             // ReplyMode 的 Serialize 就是 plain / markdown / rich。
             "reply_mode": config.reply_mode,
             "model": config.model,
-            "max_history": config.max_history,
+            // 历史默认全量携带；上下文用 /agent compress 压成摘要。
+            "history": "full",
+            "compression": true,
+            "merge_window_ms": consts::MESSAGE_MERGE_MS,
             "allow_bots": config.allow_bots,
             "session_dir": config.session_path().display().to_string(),
+            "stream_replies": config.stream_replies,
             // 工具：本次会下发给模型多少个（宿主工具表现查，可能随后续插件变化）。
-            "tools": config.model_tools,
             "tool_count": state.engine.tool_count(),
             "tool_names": state.engine.tool_names(),
+            // 走插件共享服务（describe / invoke）的能力数；0 = 没装提供方或没人登记服务。
+            "service_tool_count": state.engine.service_tool_count(),
+            // 插件注册进 agent 的能力数 / 名字（工具目录每轮读它）。
+            "registry": {
+                "count": state.engine.registry_count(),
+                "capabilities": state
+                    .registry
+                    .snapshot()
+                    .iter()
+                    .map(|item| item.name.clone())
+                    .collect::<Vec<_>>(),
+            },
             "tool_denylist": config.tool_denylist,
             // 内置屏蔽：永远不下发给模型的通用大接口（不是配置能解除的）。
             "tool_reserved": crate::agent::RESERVED_TOOLS,
         },
         "sessions": state.store.count().unwrap_or(0),
+        "artifacts": { "count": artifacts.count, "bytes": artifacts.bytes },
     })
 }
 
@@ -228,9 +322,9 @@ fn gateway_available(state: &PluginState) -> bool {
         return false;
     };
     services.as_array().is_some_and(|items| {
-        items.iter().any(|item| {
-            item.get("name").and_then(Value::as_str) == Some(state.config.gateway_service.as_str())
-        })
+        items
+            .iter()
+            .any(|item| item.get("name").and_then(Value::as_str) == Some(consts::GATEWAY_SERVICE))
     })
 }
 
@@ -318,6 +412,10 @@ unsafe extern "C-unwind" fn tool_title(user: *mut c_void, input: *const c_char) 
     entry(user, input, "title")
 }
 
+unsafe extern "C-unwind" fn tool_result(user: *mut c_void, input: *const c_char) -> *const c_char {
+    entry(user, input, "result")
+}
+
 unsafe extern "C" fn svc_describe(context: *mut c_void, input: *const c_char) -> *const c_char {
     entry(context, input, "describe")
 }
@@ -340,4 +438,16 @@ unsafe extern "C" fn svc_session(context: *mut c_void, input: *const c_char) -> 
 
 unsafe extern "C" fn svc_title(context: *mut c_void, input: *const c_char) -> *const c_char {
     entry(context, input, "title")
+}
+
+unsafe extern "C" fn svc_register(context: *mut c_void, input: *const c_char) -> *const c_char {
+    entry(context, input, "register")
+}
+
+unsafe extern "C" fn svc_unregister(context: *mut c_void, input: *const c_char) -> *const c_char {
+    entry(context, input, "unregister")
+}
+
+unsafe extern "C" fn svc_registry(context: *mut c_void, input: *const c_char) -> *const c_char {
+    entry(context, input, "registry")
 }

@@ -3,7 +3,9 @@
 //! 宿主回调只做一件事：把 `updateNewMessage` 的 JSON 丢进 channel。
 //! 解析、准入、推理、发送全部在 `agent-worker` 线程里做——那些都是**同步阻塞**的
 //! TDLib / HTTP 调用，放在回调里会卡死接收循环。
+//! 正常的连续消息按会话合并（见 consts::MESSAGE_MERGE_MS）：连发几句只产生一次请求、一条回复。
 
+use std::collections::VecDeque;
 use std::ffi::{c_char, c_void};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,8 +19,8 @@ use serde_json::Value;
 use crate::PluginState;
 use crate::agent::GuardVerdict;
 use crate::core::{
-    AgentError, AgentResult, ChatKey, ChatKind, Config, IncomingMessage, RunMode, TurnRequest,
-    chunk_text, math_open, normalize_math, strip_markdown,
+    AgentError, AgentResult, ChatKey, ChatKind, IncomingMessage, QuoteAuthor, QuotedMessage,
+    RunMode, TurnRequest, chunk_text, consts, math_open, normalize_math, strip_markdown,
 };
 use crate::td::SentMessage;
 
@@ -133,29 +135,86 @@ fn route_loop(
     receiver: mpsc::Receiver<Value>,
     stop: Arc<AtomicBool>,
 ) {
+    // 批处理期间遇到命令 / 非聊天更新：留到下一轮立即处理，顺序不乱。
+    let mut backlog: VecDeque<Value> = VecDeque::new();
     loop {
         if stop.load(Ordering::SeqCst) {
             break;
         }
-        match receiver.recv_timeout(IDLE_TICK) {
+        let first = match backlog.pop_front() {
+            Some(update) => update,
+            None => match receiver.recv_timeout(IDLE_TICK) {
+                Ok(update) => update,
+                Err(RecvTimeoutError::Timeout) => {
+                    // SAFETY: Worker 保证状态在 join 之前一直有效。
+                    let state = unsafe { &*state.0 };
+                    state.maybe_prune_sessions(&host);
+                    continue;
+                }
+                Err(RecvTimeoutError::Disconnected) => break,
+            },
+        };
+        // SAFETY: Worker 保证状态在 join 之前一直有效。
+        let state = unsafe { &*state.0 };
+        if !should_merge(&first) {
+            handle_update(&host, state, first);
+            continue;
+        }
+        let batch = collect_batch(&receiver, first, &mut backlog);
+        handle_batch(&host, state, batch);
+    }
+}
+
+/// 这条更新要不要参与「连续消息合并」。
+///
+/// 只合并正常的聊天消息；命令要立刻执行，outgoing / 服务消息走单条链路
+///（会在 handle_update 里被丢掉）。
+fn should_merge(update: &Value) -> bool {
+    let Some(message) = crate::td::TdClient::parse_incoming(update) else {
+        return false;
+    };
+    !message.is_outgoing
+        && crate::core::is_chat_content(&message.content_type)
+        && message.command().is_none()
+}
+
+/// 在合并窗口里边收边等：每来一条就顺延窗口，直到静默 / 达到上限 / 遇到不该合并的更新。
+///
+/// 不该合并的更新（命令 / 服务消息 / outgoing）放进 backlog，当前批处理完立刻处理，
+/// 不会被合并窗口拖慢，也不会乱序。
+fn collect_batch(
+    receiver: &mpsc::Receiver<Value>,
+    first: Value,
+    backlog: &mut VecDeque<Value>,
+) -> Vec<Value> {
+    let window = Duration::from_millis(consts::MESSAGE_MERGE_MS);
+    let mut batch = vec![first];
+    let mut deadline = Instant::now() + window;
+    while batch.len() < consts::MESSAGE_MERGE_MAX {
+        let now = Instant::now();
+        if now >= deadline {
+            break;
+        }
+        match receiver.recv_timeout(deadline - now) {
             Ok(update) => {
-                // SAFETY: Worker 保证状态在 join 之前一直有效。
-                let state = unsafe { &*state.0 };
-                handle_update(&host, state, update);
+                if !should_merge(&update) {
+                    backlog.push_back(update);
+                    break;
+                }
+                batch.push(update);
+                // 用户还在连续打字就继续等：窗口从最后一条重新计时。
+                deadline = Instant::now() + window;
             }
-            Err(RecvTimeoutError::Timeout) => {
-                // SAFETY: 同 Ok 分支，状态在 join 之前一直有效。
-                let state = unsafe { &*state.0 };
-                state.maybe_prune_sessions(&host);
-            }
+            Err(RecvTimeoutError::Timeout) => break,
             Err(RecvTimeoutError::Disconnected) => break,
         }
     }
+    batch
 }
 
 /// 一条更新的完整处理。
 fn handle_update(host: &HostApi, state: &PluginState, update: Value) {
-    let Some(mut message) = crate::td::TdClient::parse_incoming(&update) else {
+    let Some(message) = crate::td::TdClient::parse_incoming(&update) else {
         return;
     };
     if message.is_outgoing {
@@ -197,7 +256,12 @@ fn handle_update(host: &HostApi, state: &PluginState, update: Value) {
         return;
     }
 
-    // 2. 会话种类准入。
+    handle_message(host, state, message);
+}
+
+/// 单条消息的准入 + 推理（批处理里的「最后一条」也走这里）。
+fn handle_message(host: &HostApi, state: &PluginState, mut message: IncomingMessage) {
+    // 1. 会话种类准入：先看会话类型，再去取引用内容（免得白花一次 TDLib 调用）。
     match message.kind {
         ChatKind::Private => {
             if !state.config.allow_private {
@@ -208,11 +272,27 @@ fn handle_update(host: &HostApi, state: &PluginState, update: Value) {
             if !state.config.allow_groups {
                 return;
             }
-            if state.config.group_require_mention && !mentions_me(&state.host, &message) {
-                return;
-            }
         }
         ChatKind::Channel => return,
+    }
+
+    // 2. 引用上下文：群里「回复我的消息」也算点名，本轮提示词也复用这次结果。
+    let quoted = quote_context(host, state, &message);
+    if message.kind == ChatKind::Group
+        && state.config.group_require_mention
+        && !mentions_me(&state.host, &message)
+        && !quoted
+            .as_ref()
+            .is_some_and(|quoted| quoted.author == QuoteAuthor::Me)
+    {
+        host.log(
+            LogLevel::Debug,
+            &format!(
+                "agent: 群里没有 @ 我、也不是回复我的消息，忽略（消息 {}）",
+                message.message_id
+            ),
+        );
+        return;
     }
 
     // 3. 发送者是不是 bot（Bot-to-Bot 准入）。
@@ -259,7 +339,7 @@ fn handle_update(host: &HostApi, state: &PluginState, update: Value) {
     }
 
     // 5. 主链路。
-    if let Err(error) = respond(host, state, &message) {
+    if let Err(error) = respond(host, state, &message, quoted.as_ref()) {
         host.warn(&format!(
             "agent: 处理消息 {} 失败：{error}",
             message.message_id
@@ -267,20 +347,85 @@ fn handle_update(host: &HostApi, state: &PluginState, update: Value) {
     }
 }
 
+/// 一批连续消息：按会话分组，每个会话只回答最后一条，前面的正文并进本轮输入。
+///
+/// 这是「一次对话」而不是「每个句子发一次请求」的落点：同一窗口里用户连发的几句话
+/// 会合成一条 user 消息；模型看到的上下文不丢，但只产生一次调用、一条回复。
+fn handle_batch(host: &HostApi, state: &PluginState, updates: Vec<Value>) {
+    let mut groups: Vec<(ChatKey, Vec<IncomingMessage>)> = Vec::new();
+    for update in updates {
+        let Some(message) = crate::td::TdClient::parse_incoming(&update) else {
+            continue;
+        };
+        // should_merge 已筛过；这里再兜一层，防止以后改筛选逻辑时混进非聊天内容。
+        if message.is_outgoing
+            || !crate::core::is_chat_content(&message.content_type)
+            || message.command().is_some()
+        {
+            continue;
+        }
+        let key = message.key();
+        match groups.iter_mut().find(|(candidate, _)| *candidate == key) {
+            Some((_, messages)) => messages.push(message),
+            None => groups.push((key, vec![message])),
+        }
+    }
+
+    for (_, mut messages) in groups {
+        let Some(mut last) = messages.pop() else {
+            continue;
+        };
+        // 前面的句子按到达顺序拼在前面，最后一条是「要回答的那句」。
+        let merged = merge_texts(
+            messages
+                .iter()
+                .map(IncomingMessage::display_text)
+                .chain(std::iter::once(last.display_text())),
+        );
+        if !messages.is_empty() {
+            host.info(&format!(
+                "agent: 合并连续 {} 条消息，只回复最后一条（消息 {}）",
+                messages.len() + 1,
+                last.message_id
+            ));
+        }
+        // 并入正文后按「一次输入」走完整链路：会话落盘、提示词都只产生一条 user 消息。
+        last.text = merged;
+        handle_message(host, state, last);
+    }
+}
+
+/// 合并一批正文：跳过空串，按到达顺序用换行连接。
+fn merge_texts(texts: impl IntoIterator<Item = String>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for text in texts {
+        let text = text.trim();
+        if !text.is_empty() {
+            parts.push(text.to_owned());
+        }
+    }
+    parts.join("\n")
+}
+
 /// 推理并回复。
-fn respond(host: &HostApi, state: &PluginState, message: &IncomingMessage) -> AgentResult<()> {
+fn respond(
+    host: &HostApi,
+    state: &PluginState,
+    message: &IncomingMessage,
+    quoted: Option<&QuotedMessage>,
+) -> AgentResult<()> {
     let config = &state.config;
 
     // 私聊首条消息：需要的话开一个话题，这个会话以后就挂在话题里。
     let mut topic_id = message.topic_id;
     let mut created_topic = false;
     if topic_id.is_none() && message.is_private() && config.topic_auto_create {
-        let title = topic_title(config, &message.display_text());
+        let title = topic_title(&message.display_text());
         match state.td.create_topic(
             message.chat_id,
             &title,
-            config.topic_icon_color,
-            config.action_timeout_ms,
+            consts::TOPIC_ICON_COLOR,
+            consts::ACTION_TIMEOUT_MS,
         ) {
             Ok(topic) => {
                 host.info(&format!(
@@ -301,13 +446,13 @@ fn respond(host: &HostApi, state: &PluginState, message: &IncomingMessage) -> Ag
     let session_existed = matches!(state.store.load(&key), Ok(Some(_)));
 
     // 首次聊天必须设置标题：用首条消息内容，不额外调用模型（自动建的话题已经是这个标题）。
-    if !session_existed && config.topic_title_auto {
+    if !session_existed {
         set_topic_from_first_message(host, state, message, topic_id, created_topic);
     }
 
     let request = TurnRequest {
         key,
-        user_text: message.display_text(),
+        user_text: prompt_text(message, quoted),
         session_id: None,
         system_prompt: None,
         model: None,
@@ -316,10 +461,8 @@ fn respond(host: &HostApi, state: &PluginState, message: &IncomingMessage) -> Ag
 
     // 官方式流式：私聊 + 网关提供 stream → 真 token 流（首字延迟真正下降）；
     // 否则退回「同步推理 + 拿到终稿后分块回放」。
-    let gateway_stream = config.stream_replies
-        && config.gateway_stream
-        && message.is_private()
-        && state.engine.gateway().supports_stream();
+    let gateway_stream =
+        config.stream_replies && message.is_private() && state.engine.gateway().supports_stream();
 
     let finished = if gateway_stream {
         stream_from_gateway(host, state, message, topic_id, &request)?
@@ -328,12 +471,12 @@ fn respond(host: &HostApi, state: &PluginState, message: &IncomingMessage) -> Ag
             &state.store,
             &request,
             RunMode::Single,
-            config.loop_max_turns,
+            consts::LOOP_MAX_TURNS,
         ) {
             Ok(outcome) => (outcome.reply, outcome.session),
             Err(error) => {
                 host.warn(&format!("agent: 推理失败：{error}"));
-                (failure_text(config, &error.to_string()), key.file_stem())
+                (failure_text(&error.to_string()), key.file_stem())
             }
         };
         // 私有聊天走草稿消息（Thinking 占位 → 分块 → 正式消息），群聊直接发终稿。
@@ -363,6 +506,60 @@ fn respond(host: &HostApi, state: &PluginState, message: &IncomingMessage) -> Ag
     Ok(())
 }
 
+/// 取引用上下文：用户点了「回复」时，把被引用那条消息从 TDLib 取回来。
+///
+/// 取到的结果有两处用途：群里「回复我的消息」也算点名（`group_require_mention`），
+/// 以及本轮提示词里的引用块。取不到（已删除 / 回放 / 无权限）返回 `None`。
+fn quote_context(
+    host: &HostApi,
+    state: &PluginState,
+    message: &IncomingMessage,
+) -> Option<QuotedMessage> {
+    let reply = message.reply.as_ref()?;
+    // 引用上下文始终取：群里的「回复我 = 点名」判断也依赖它。
+    match state.td.quoted_message(message) {
+        Ok(quoted) => {
+            match &quoted {
+                Some(quoted) => host.log(
+                    LogLevel::Debug,
+                    &format!(
+                        "agent: 引用 #{}（{}，{} 字）",
+                        quoted.message_id,
+                        quoted.content_type,
+                        quoted.text.chars().count()
+                    ),
+                ),
+                None => host.log(
+                    LogLevel::Debug,
+                    &format!("agent: 引用 #{} 取不到正文，只留标记", reply.message_id),
+                ),
+            }
+            quoted
+        }
+        Err(error) => {
+            host.log(
+                LogLevel::Debug,
+                &format!("agent: 取被引用消息失败（只留引用标记）：{error}"),
+            );
+            None
+        }
+    }
+}
+
+/// 本轮交给模型的用户输入：用户点了「回复」时，在最前面拼一段被引用消息的上下文块。
+///
+/// 为什么必须拼：更新里只有被引用消息的 id（外加手动选中片段），模型看不到那条消息，
+/// 面对「这个呢？」只能瞎猜。取不到正文时也保留引用标记——让模型知道「他在回复某条
+/// 消息」，比装作没看见好。
+fn prompt_text(message: &IncomingMessage, quoted: Option<&QuotedMessage>) -> String {
+    let text = message.display_text();
+    let Some(reply) = message.reply.as_ref() else {
+        return text;
+    };
+    let block = crate::core::render_quote_block(reply, quoted, consts::QUOTE_MAX_CHARS);
+    format!("{block}{text}")
+}
+
 /// 网关真流式：空草稿占位 → 每块增量更新草稿 → 正式消息落地。
 ///
 /// 返回 `Some((会话 id, 回复字数))`；用户中途停止返回 `None`（不发终稿）。
@@ -373,20 +570,19 @@ fn stream_from_gateway(
     topic_id: Option<i32>,
     request: &TurnRequest,
 ) -> AgentResult<Option<(String, usize)>> {
-    let config = &state.config;
     let draft = crate::td::DraftSend {
         chat_id: message.chat_id,
         topic_id,
         draft_id: message.message_id,
-        can_stop: config.stream_can_stop,
+        can_stop: consts::STREAM_CAN_STOP,
         keep_on_stop: false,
-        timeout_ms: config.action_timeout_ms,
+        timeout_ms: consts::ACTION_TIMEOUT_MS,
     };
     let topic_key = topic_id.unwrap_or(0);
-    let interval = Duration::from_millis(config.stream_interval_ms.max(100));
+    let interval = Duration::from_millis(consts::STREAM_INTERVAL_MS);
     let mut buffer = String::new();
     let mut last_update = Instant::now() - interval;
-    let mut rich_ok = config.rich_drafts;
+    let mut rich_ok = true;
     let mut drafts_blocked = false;
     let mut sink = |delta: &str| -> bool {
         buffer.push_str(delta);
@@ -396,12 +592,10 @@ fn stream_from_gateway(
         if last_update.elapsed() >= interval && !drafts_blocked {
             last_update = Instant::now();
             // 停在公式中间就不更新这一帧：半个 $ 会被宿主渲染成裸美元符号。
-            let formula_closed = !config.normalize_math || !math_open(&buffer);
+            let formula_closed = !math_open(&buffer);
             if rich_ok
                 && formula_closed
-                && let Err(error) = state
-                    .td
-                    .send_rich_draft(&draft, &rich_text(config, &buffer))
+                && let Err(error) = state.td.send_rich_draft(&draft, &rich_text(&buffer))
             {
                 if is_rate_limited(&error.to_string()) {
                     host.warn("agent: 草稿更新触发限流，后续不再更新草稿（终稿仍会发送）");
@@ -452,17 +646,14 @@ fn stream_from_gateway(
             }
             let mut text = outcome.reply;
             if text.trim().is_empty() {
-                text = failure_text(
-                    config,
-                    outcome.error.as_deref().unwrap_or("模型没有返回内容"),
-                );
+                text = failure_text(outcome.error.as_deref().unwrap_or("模型没有返回内容"));
             }
             finish_reply(host, state, message, topic_id, &text, true)?;
             Ok(Some((outcome.session, text.chars().count())))
         }
         Err(error) => {
             host.warn(&format!("agent: 流式推理失败：{error}"));
-            let text = failure_text(config, &error.to_string());
+            let text = failure_text(&error.to_string());
             finish_reply(host, state, message, topic_id, &text, false)?;
             Ok(Some((request.key.file_stem(), text.chars().count())))
         }
@@ -485,13 +676,11 @@ fn set_topic_from_first_message(
     if created_topic {
         return;
     }
-    let title = topic_title(&state.config, &message.display_text());
-    match state.td.edit_topic(
-        message.chat_id,
-        topic_id,
-        &title,
-        state.config.action_timeout_ms,
-    ) {
+    let title = topic_title(&message.display_text());
+    match state
+        .td
+        .edit_topic(message.chat_id, topic_id, &title, consts::ACTION_TIMEOUT_MS)
+    {
         Ok(()) => host.info(&format!(
             "agent: 首次对话已设置话题 #{topic_id} 标题为「{title}」"
         )),
@@ -512,7 +701,7 @@ fn finish_reply(
     text: &str,
     streamed: bool,
 ) -> AgentResult<()> {
-    let normalized = rich_text(&state.config, text);
+    let normalized = rich_text(text);
     let sent = send_with_mode(state, message.chat_id, topic_id, &normalized, None)?;
     host.info(&format!(
         "agent: 回复已投递（{}；新消息 {}，chat {}，topic {:?}{}）",
@@ -540,7 +729,7 @@ fn stream_reply(
     text: &str,
 ) -> AgentResult<()> {
     let config = &state.config;
-    let text = rich_text(config, &truncate(text, config.max_reply_chars));
+    let text = rich_text(&truncate(text, consts::MAX_REPLY_CHARS));
     let chat_id = message.chat_id;
     let topic_key = topic_id.unwrap_or(0);
     let draft_id = message.message_id;
@@ -549,9 +738,9 @@ fn stream_reply(
         chat_id,
         topic_id,
         draft_id,
-        can_stop: config.stream_can_stop,
+        can_stop: consts::STREAM_CAN_STOP,
         keep_on_stop: false,
-        timeout_ms: config.action_timeout_ms,
+        timeout_ms: consts::ACTION_TIMEOUT_MS,
     };
 
     if streaming {
@@ -586,12 +775,7 @@ fn stream_reply(
 
 /// 发一条思考占位：富草稿走 `inputPageBlockThinking` 块，文本模式走空草稿。
 fn send_thinking(host: &HostApi, state: &PluginState, draft: &crate::td::DraftSend) {
-    let config = &state.config;
-    let result = if config.rich_drafts {
-        state.td.send_thinking_draft(draft, &config.thinking_text)
-    } else {
-        state.td.send_text_draft(draft, "")
-    };
+    let result = state.td.send_thinking_draft(draft, consts::THINKING_TEXT);
     match result {
         Ok(()) => host.log(
             LogLevel::Debug,
@@ -613,21 +797,20 @@ fn reveal(
     draft: &crate::td::DraftSend,
     text: &str,
 ) -> AgentResult<()> {
-    let config = &state.config;
     if text.trim().is_empty() {
         return Ok(());
     }
-    let chunks = chunk_text(text, reveal_chunk_chars(config, text.chars().count()));
+    let chunks = chunk_text(text, reveal_chunk_chars(text.chars().count()));
     let topic_key = draft.topic_id.unwrap_or(0);
     let mut raw = String::with_capacity(text.len());
-    let mut rich_ok = config.rich_drafts;
+    let mut rich_ok = true;
     let mut drafts_blocked = false;
     for (index, chunk) in chunks.iter().enumerate() {
         if state.take_stop(draft.chat_id, topic_key, draft.draft_id) {
             return Ok(());
         }
         raw.push_str(chunk);
-        let formula_closed = !config.normalize_math || !math_open(&raw);
+        let formula_closed = !math_open(&raw);
         if !drafts_blocked
             && rich_ok
             && formula_closed
@@ -655,7 +838,7 @@ fn reveal(
             }
         }
         if index + 1 < chunks.len() {
-            std::thread::sleep(Duration::from_millis(config.stream_interval_ms.max(100)));
+            std::thread::sleep(Duration::from_millis(consts::STREAM_INTERVAL_MS));
         }
     }
     host.log(
@@ -665,21 +848,17 @@ fn reveal(
     Ok(())
 }
 
-/// 每块字符数：尊重配置，并按「总时长上限」自动放大。
-fn reveal_chunk_chars(config: &Config, total_chars: usize) -> usize {
-    let base = config.stream_chunk_chars.max(1);
-    let interval = config.stream_interval_ms.max(1);
-    let max_steps = (config.stream_max_seconds.max(1) * 1000 / interval).max(1) as usize;
+/// 每块字符数：按内置常量，并按「总时长上限」自动放大。
+fn reveal_chunk_chars(total_chars: usize) -> usize {
+    let base = consts::STREAM_CHUNK_CHARS;
+    let interval = consts::STREAM_INTERVAL_MS;
+    let max_steps = (consts::STREAM_MAX_SECONDS * 1000 / interval).max(1) as usize;
     base.max(total_chars.div_ceil(max_steps))
 }
 
-/// 富消息前的公式归一（配置可关）。
-fn rich_text(config: &Config, markdown: &str) -> String {
-    if config.normalize_math {
-        normalize_math(markdown)
-    } else {
-        markdown.to_owned()
-    }
+/// 富消息前的公式归一（固定开启）。
+fn rich_text(markdown: &str) -> String {
+    normalize_math(markdown)
 }
 
 /// TDLib / Telegram 的限流错误（429 / flood wait）。
@@ -699,7 +878,7 @@ fn mode_label(mode: crate::core::ReplyMode) -> &'static str {
 
 /// 普通命令回复（不经过 Agent）。
 fn reply_text(state: &PluginState, message: &IncomingMessage, text: &str) -> AgentResult<()> {
-    let text = truncate(text, state.config.max_reply_chars);
+    let text = truncate(text, consts::MAX_REPLY_CHARS);
     send_with_mode(
         state,
         message.chat_id,
@@ -719,7 +898,7 @@ fn send_with_mode(
     reply_to: Option<i64>,
 ) -> AgentResult<SentMessage> {
     let config = &state.config;
-    let timeout = config.send_timeout_ms;
+    let timeout = consts::SEND_TIMEOUT_MS;
     match config.reply_mode {
         crate::core::ReplyMode::Plain => state
             .td
@@ -774,22 +953,20 @@ fn send_with_mode(
     }
 }
 
-/// 失败文案：`failure_text` 里的 `{times}` / `{error}` 替换；原因截断到 300 字符。
-pub fn failure_text(config: &Config, error: &str) -> String {
+/// 失败文案：原因截断到 300 字符。硬依赖下网关不在场只可能是配置事故，
+/// 文案仍给用户看到原因，便于排查。
+pub fn failure_text(error: &str) -> String {
     let mut reason = error.trim().replace('\n', " ");
     if reason.chars().count() > 300 {
         reason = reason.chars().take(300).collect::<String>() + "…";
     }
-    config
-        .failure_text
-        .replace("{times}", &config.retry_times.to_string())
-        .replace("{error}", &reason)
+    format!("请求失败：{reason}")
 }
 
 /// 话题标题：首条消息的可见前缀。
-fn topic_title(config: &Config, text: &str) -> String {
+fn topic_title(text: &str) -> String {
     let plain: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let title: String = plain.chars().take(config.topic_title_max_chars).collect();
+    let title: String = plain.chars().take(consts::TOPIC_TITLE_MAX_CHARS).collect();
     if title.trim().is_empty() {
         "AI 会话".to_owned()
     } else {

@@ -16,6 +16,7 @@
 //! ```text
 //! updateNewMessage
 //!   -> host::worker（回调只投递，不阻塞）
+//!   -> 600ms 内同一会话的连发消息合并（只回答最后一条；命令不参与）
 //!   -> 解析 / 准入 / 防环
 //!   -> 私聊无话题且开了 topic_auto_create：createForumTopic 建新会话
 //!   -> agent::AgentEngine 取历史 + 调网关 + （可选）循环迭代
@@ -25,9 +26,14 @@
 //!
 //! ## 对外接口
 //!
-//! - 工具：`fengyegf.agent.chat` / `.run` / `.send` / `.session` / `.title`
+//! - 工具：`fengyegf.agent.chat` / `.run` / `.send` / `.session` / `.title` / `.result`
 //! - 服务：`fengyegf.agent`（方法 `chat` / `run` / `send` / `session` / `describe`）
-//! - 命令：`/agent new|list|use|reset|status|help`
+//! - 命令：`/agent new|list|use|reset|compress|status|help`
+//!
+//! ## 依赖
+//!
+//! `fengyegf.llm` 是**硬依赖**（[`Plugin::inject`]）：没装网关时本插件停在 Pending，
+//! 而不是启动后每条消息都只剩失败文案。运行时网关调用仍是同步阻塞的。
 
 pub mod agent;
 pub mod api;
@@ -72,6 +78,11 @@ pub struct PluginState {
     pub store: SessionStore,
     /// Agent 运行时。
     pub engine: AgentEngine,
+    /// 长工具结果的短期缓存（分页 / 字段过滤；工具目录写、fengyegf.agent.result 读）。
+    pub artifacts: Arc<agent::ArtifactStore>,
+    /// 能力注册表：其它插件通过服务方法 register 把自己的能力登记到这里，
+    /// 工具目录每轮读它（见 agent::registry 与 agent::tools）。
+    pub registry: std::sync::Arc<agent::Registry>,
     /// 防环 / 限速状态（worker 与工具调用并发访问）。
     pub guard: Mutex<agent::Guard>,
     /// 用户按下「停止生成」的草稿：`(chat_id, forum_topic_id, draft_id)`。
@@ -89,14 +100,23 @@ impl PluginState {
         let config = Arc::new(config);
         let td = TdClient::new(host);
         let store = SessionStore::open(&config).map_err(|error| error.to_string())?;
-        let engine = AgentEngine::new(host, Arc::clone(&config));
-        let guard = Mutex::new(agent::Guard::new(&config));
+        let registry = Arc::new(agent::Registry::new());
+        let artifacts = Arc::new(agent::ArtifactStore::new());
+        let engine = AgentEngine::new(
+            host,
+            Arc::clone(&config),
+            Arc::clone(&registry),
+            Arc::clone(&artifacts),
+        );
+        let guard = Mutex::new(agent::Guard::new());
         Ok(Self {
             host,
             config,
             td,
             store,
             engine,
+            artifacts,
+            registry,
             guard,
             stops: Mutex::new(HashSet::new()),
             started_at: unix_now(),
@@ -194,23 +214,18 @@ impl Plugin for AgentPlugin {
         // 启动时先清一次过期会话（session_ttl_days = 0 表示永久，内部直接跳过）。
         state.prune_sessions_now(&self.host);
 
-        if state.config.commands {
-            cmd::register(&self.host);
-        }
-        if state.config.tools {
-            self.tools = api::register_tools(&self.host, state_ptr);
-        }
-        if state.config.service {
-            let service = api::AgentService::new(state_ptr);
-            let handle = self
-                .host
-                .provide_service_shared(api::SERVICE_NAME, service.vtable_ptr());
-            if handle.is_valid() {
-                self.service = Some(service);
-            } else {
-                self.host
-                    .warn("agent: 注册共享服务失败（同名服务已存在？）");
-            }
+        // 命令 / 工具 / 服务常开：关掉某一层不是「配置」，是部署事故；要停就停整个插件。
+        cmd::register(&self.host);
+        self.tools = api::register_tools(&self.host, state_ptr);
+        let service = api::AgentService::new(state_ptr);
+        let handle = self
+            .host
+            .provide_service_shared(api::SERVICE_NAME, service.vtable_ptr());
+        if handle.is_valid() {
+            self.service = Some(service);
+        } else {
+            self.host
+                .warn("agent: 注册共享服务失败（同名服务已存在？）");
         }
 
         let worker = host::Worker::start(self.host, state_ptr)?;
@@ -237,11 +252,9 @@ impl Plugin for AgentPlugin {
         }
 
         self.host.info(&format!(
-            "agent: 已启动（{}；工具 {} 个，命令 {}，服务 {}）",
+            "agent: 已启动（{}；工具 {} 个，命令与服务常开）",
             state.config.summary(),
-            self.tools.len(),
-            state.config.commands,
-            state.config.service
+            self.tools.len()
         ));
         self.worker = Some(worker);
         self.subscription = Some(subscription);
@@ -259,6 +272,12 @@ impl Plugin for AgentPlugin {
         self.tools.clear();
         self.state = None;
         self.host.info("agent: 已停止");
+    }
+
+    /// 硬依赖 LLM 网关：没装 `fengyegf.llm` 时插件停在 Pending，
+    /// 而不是启动后每条消息都只剩失败文案。
+    fn inject() -> Vec<String> {
+        vec![crate::core::consts::GATEWAY_SERVICE.to_owned()]
     }
 }
 

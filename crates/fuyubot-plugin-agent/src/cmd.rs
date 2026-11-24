@@ -1,4 +1,4 @@
-//! `/agent` 命令表：new / list / use / reset / status / help。
+//! `/agent` 命令表：new / list / use / reset / compress / status / help。
 //!
 //! 为什么命令层这么薄：真正的推理在 [`crate::host::worker`] 的主链路里（消息 → 网关 →
 //! 编辑终稿），命令只做"会话管理"——开话题、看列表、清历史、查状态。把它单独一层有三个好处：
@@ -14,7 +14,7 @@ use fuyubot_plugin_api::{HostApi, HostExt};
 use serde_json::json;
 
 use crate::PluginState;
-use crate::core::{AgentResult, ChatKey, IncomingMessage, ReplyMode};
+use crate::core::{AgentResult, ChatKey, IncomingMessage, ReplyMode, consts};
 use crate::session::SessionSummary;
 use crate::td::TopicInfo;
 
@@ -22,6 +22,8 @@ use crate::td::TopicInfo;
 pub const DEFAULT_TOPIC_TITLE: &str = "AI 会话";
 /// `/agent list` 顺带问 TDLib 要多少个话题。
 const LIST_TOPICS_LIMIT: i32 = 20;
+/// `/agent compress` 回显摘要的字符上限（完整摘要已落盘，不必把整段发出来）。
+const COMPRESS_REPLY_MAX_CHARS: usize = 1_200;
 
 /// `/agent` 的子命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +36,8 @@ pub enum Subcommand {
     List,
     /// `reset`：清空当前会话的历史。
     Reset,
+    /// `compress`：把当前会话历史压成摘要（之后每轮自动带上）。
+    Compress,
     /// `status`：当前会话 / 模型 / 网关 / 话题开关。
     Status,
     /// `use <id>`：按 id 查一个会话。
@@ -54,6 +58,7 @@ pub fn parse_subcommand(raw_args: &str) -> Subcommand {
         "new" | "open" => Subcommand::New(rest.to_owned()),
         "list" | "ls" => Subcommand::List,
         "reset" | "clear" => Subcommand::Reset,
+        "compress" | "compact" | "summarize" | "压缩" => Subcommand::Compress,
         "status" | "state" => Subcommand::Status,
         "use" | "switch" => Subcommand::Use(rest.to_owned()),
         _ => Subcommand::Help,
@@ -69,6 +74,7 @@ pub fn help_text() -> String {
         "· /agent list —— 列出当前 chat 的会话（本地 + TDLib 话题）",
         "· /agent use <id> —— 查看某个会话（路由仍按 chat + topic 自动进行）",
         "· /agent reset —— 清空当前会话的历史",
+        "· /agent compress —— 把历史压成摘要（之后每轮自动带上，类似 harness 的压缩）",
         "· /agent status —— 会话 / 模型 / 网关 / 话题开关",
         "· /agent help —— 这份说明",
         "直接发消息（群里先 @ 我）就会走 Agent；不需要每次 new。",
@@ -136,6 +142,7 @@ fn title_or_default(title: &str) -> &str {
 pub fn format_status(
     session_id: &str,
     message_count: usize,
+    context: &str,
     model: &str,
     reply_mode: ReplyMode,
     gateway_available: bool,
@@ -148,9 +155,10 @@ pub fn format_status(
         model
     };
     format!(
-        "Agent 状态\n· 当前会话：{}（{} 条消息）\n· 模型：{}\n· 回复形态：{}\n· 网关：{}\n· 话题：{}",
+        "Agent 状态\n· 当前会话：{}（{} 条消息）\n· 上下文：{}\n· 模型：{}\n· 回复形态：{}\n· 网关：{}\n· 话题：{}",
         session_id,
         message_count,
+        context,
         model,
         reply_mode_name(reply_mode),
         gateway_available_label(gateway_available),
@@ -170,9 +178,9 @@ fn reply_mode_name(mode: ReplyMode) -> &'static str {
 /// 网关状态文案。
 fn gateway_available_label(available: bool) -> &'static str {
     if available {
-        "可用（正常推理）"
+        "可用（硬依赖 fengyegf.llm）"
     } else {
-        "不在场（降级为兜底文案）"
+        "不在场（检查 fengyegf.llm 插件是否启用）"
     }
 }
 
@@ -200,7 +208,7 @@ fn normalize_title(raw: &str, max_chars: usize) -> String {
 pub fn register(host: &HostApi) {
     let payload = json!({
         "name": "agent",
-        "description": "AI Agent 会话管理：new / list / use / reset / status / help",
+        "description": "AI Agent 会话管理：new / list / use / reset / compress / status / help",
         "role": "user",
     })
     .to_string();
@@ -227,6 +235,7 @@ pub fn dispatch(state: &PluginState, message: &IncomingMessage) -> AgentResult<O
         Subcommand::New(raw_title) => new_session(state, message, &raw_title)?,
         Subcommand::List => list_sessions(state, message)?,
         Subcommand::Reset => reset_session(state, message)?,
+        Subcommand::Compress => compress_session(state, message)?,
         Subcommand::Status => status_text(state, message)?,
         Subcommand::Use(raw_id) => use_session(state, message, &raw_id)?,
     };
@@ -246,12 +255,12 @@ fn new_session(
         );
     }
 
-    let title = normalize_title(raw_title, state.config.topic_title_max_chars);
+    let title = normalize_title(raw_title, consts::TOPIC_TITLE_MAX_CHARS);
     let topic = state.td.create_topic(
         message.chat_id,
         &title,
-        state.config.topic_icon_color,
-        state.config.action_timeout_ms,
+        consts::TOPIC_ICON_COLOR,
+        consts::ACTION_TIMEOUT_MS,
     )?;
     let key = ChatKey::new(message.chat_id, Some(topic.topic_id));
     state.store.ensure(&key, &title)?;
@@ -267,7 +276,7 @@ fn list_sessions(state: &PluginState, message: &IncomingMessage) -> AgentResult<
     let topics = match state.td.list_topics(
         message.chat_id,
         LIST_TOPICS_LIMIT,
-        state.config.action_timeout_ms,
+        consts::ACTION_TIMEOUT_MS,
     ) {
         Ok(topics) => topics,
         Err(error) => {
@@ -300,17 +309,58 @@ fn reset_session(state: &PluginState, message: &IncomingMessage) -> AgentResult<
     }
 }
 
+/// `compress`：把当前会话历史压成摘要（之后每轮自动带上）。
+fn compress_session(state: &PluginState, message: &IncomingMessage) -> AgentResult<String> {
+    let key = ChatKey::new(message.chat_id, message.topic_id);
+    let compression = state.engine.compress(&state.store, &key)?;
+    let summary = clip(&compression.summary, COMPRESS_REPLY_MAX_CHARS);
+    Ok(format!(
+        "已压缩会话 {}：{} 条消息 → {} 字摘要。\n后续对话会自动带上这份摘要；/agent status 可查看。\n\n{}",
+        compression.session,
+        compression.removed,
+        compression.summary.chars().count(),
+        summary
+    ))
+}
+
+/// 上下文状态：Agent 默认带全量历史，压缩过就把「压了什么」摆出来。
+fn context_label(compacted_messages: usize, summary_chars: usize, message_count: usize) -> String {
+    if compacted_messages > 0 {
+        format!(
+            "已压缩 {compacted_messages} 条消息 → {summary_chars} 字摘要（/agent compress 可再压）"
+        )
+    } else if message_count > 0 {
+        "未压缩，历史全量携带（/agent compress 可压缩）".to_owned()
+    } else {
+        "空会话".to_owned()
+    }
+}
+
+/// 按字符截断（回显摘要用）。
+fn clip(text: &str, limit: usize) -> String {
+    let text = text.trim();
+    if text.chars().count() <= limit {
+        return text.to_owned();
+    }
+    let cut: String = text.chars().take(limit.saturating_sub(1)).collect();
+    format!("{cut}…")
+}
+
 /// `status`：取数据，文案交给纯函数。
 fn status_text(state: &PluginState, message: &IncomingMessage) -> AgentResult<String> {
     let key = ChatKey::new(message.chat_id, message.topic_id);
-    let count = state
-        .store
-        .load(&key)?
-        .map(|session| session.messages.len())
+    let session = state.store.load(&key)?;
+    let count = session.as_ref().map(|s| s.messages.len()).unwrap_or(0);
+    let compacted = session.as_ref().map(|s| s.compacted_messages).unwrap_or(0);
+    let summary_chars = session
+        .as_ref()
+        .map(|s| s.summary.chars().count())
         .unwrap_or(0);
+    let context = context_label(compacted, summary_chars, count);
     Ok(format_status(
         &key.file_stem(),
         count,
+        &context,
         &state.config.model,
         state.config.reply_mode,
         state.engine.gateway().available(),

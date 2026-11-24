@@ -1,8 +1,8 @@
 //! LLM 网关客户端：把一轮对话翻译成 `fengyegf.llm` 共享服务的一次调用。
 //!
 //! 为什么不自己发 HTTP：网关插件已经把三个协议、鉴权、超时、重试收口了，这边只要
-//! 认 JSON 协议；网关没装 / 被卸载时本插件退回兜底文案，仍然活着。网关是**软依赖**，
-//! 所以 `available` 每次都现查宿主，不缓存——服务随时可能比我们晚加载。
+//! 认 JSON 协议。网关是**硬依赖**（`Plugin::inject`）：没装 `fengyegf.llm` 时本插件
+//! 不会被启动；运行期 `available` 仍每次现查宿主，用于诊断与状态展示，不缓存。
 //!
 //! 服务调用是**同步阻塞**的（宿主在本线程直接转交给提供方的方法），只能在 worker
 //! 线程或工具 / 服务处理器里调；宿主回调里调会卡住整个接收循环。
@@ -28,7 +28,7 @@ impl GatewayClient {
     pub fn new(host: HostApi, config: &Config) -> Self {
         Self {
             host,
-            service: config.gateway_service.clone(),
+            service: crate::core::consts::GATEWAY_SERVICE.to_owned(),
             method: config.gateway_method.clone(),
             model: config.model.clone(),
         }
@@ -46,8 +46,7 @@ impl GatewayClient {
 
     /// 网关服务当前是否在场。
     ///
-    /// 每次现查 `list_services`（JSON 数组文本）：软依赖可能运行期加载 / 卸载，
-    /// 缓存一次判断会让插件在网关重载后一直走兜底文案。解析失败按不可用处理。
+    /// 每次现查 `list_services`（JSON 数组文本）：诊断 / 状态展示用，解析失败按不可用处理。
     pub fn available(&self) -> bool {
         has_service(&self.host.list_services(), &self.service)
     }

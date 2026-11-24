@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use crate::PluginState;
-use crate::core::{AgentError, AgentResult, RunMode};
+use crate::core::{AgentError, AgentResult, RunMode, consts};
 
 use super::{TurnArgs, direct_messages, parse_args, turn_value};
 
@@ -11,7 +11,8 @@ use super::{TurnArgs, direct_messages, parse_args, turn_value};
 pub const NAME: &str = "fengyegf.agent.run";
 
 /// 工具说明（注册到宿主工具表）。
-pub const DESCRIPTION: &str = "跑 Agent 循环：mode=loop 时最多 max_turns 轮（默认配置里的 loop_max_turns），mode=single 只跑一轮。";
+pub const DESCRIPTION: &str =
+    "跑 Agent 循环：mode=loop 时最多 max_turns 轮（默认 3 轮），mode=single 只跑一轮。";
 
 /// 入参 schema。
 pub fn schema() -> Value {
@@ -66,7 +67,7 @@ pub fn handle(state: &PluginState, input: &Value) -> AgentResult<Value> {
 
     let max_turns = match args.max_turns {
         Some(turns) => turns.max(1),
-        None if mode == RunMode::Loop => state.config.loop_max_turns.max(1),
+        None if mode == RunMode::Loop => consts::LOOP_MAX_TURNS,
         None => 1,
     };
     let request = args.request(key, prompt);

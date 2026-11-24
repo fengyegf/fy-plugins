@@ -4,6 +4,7 @@
 //! 散到各文件迟早会漂移。
 
 pub mod chat;
+pub mod result;
 pub mod run;
 pub mod send;
 pub mod session;
@@ -93,7 +94,8 @@ impl TurnArgs {
 /// 无会话直通的 messages：系统提示（入参优先，其次配置）+ 本轮用户输入。
 pub(crate) fn direct_messages(state: &PluginState, args: &TurnArgs, prompt: &str) -> Vec<Value> {
     let system = clean(args.system.as_deref())
-        .unwrap_or_else(|| state.config.system_prompt.trim().to_owned());
+        .map(|system| crate::agent::with_guide(&system))
+        .unwrap_or_else(|| crate::agent::with_guide(&state.config.system_prompt));
     let mut messages = Vec::with_capacity(2);
     if !system.is_empty() {
         messages.push(json!({ "role": "system", "content": system }));

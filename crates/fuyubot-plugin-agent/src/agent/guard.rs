@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 
-use crate::core::{Config, IncomingMessage};
+use crate::core::{IncomingMessage, consts};
 
 /// 连续 bot 往返的静默重置窗口：超过这个时长没有新往返，就当作新一轮对话。
 ///
@@ -53,12 +53,12 @@ pub struct Guard {
 }
 
 impl Guard {
-    /// 按配置建。
-    pub fn new(config: &Config) -> Self {
+    /// 按内置常量建（防环节奏不开放配置）。
+    pub fn new() -> Self {
         Self {
-            dedupe_window_secs: config.dedupe_window_secs,
-            bot_rate_limit_secs: config.bot_rate_limit_secs,
-            bot_max_depth: config.bot_max_depth,
+            dedupe_window_secs: consts::DEDUPE_WINDOW_SECS,
+            bot_rate_limit_secs: consts::BOT_RATE_LIMIT_SECS,
+            bot_max_depth: consts::BOT_MAX_DEPTH,
             dedupe: HashMap::new(),
             bots: HashMap::new(),
         }
@@ -134,5 +134,11 @@ impl Guard {
                 peer.last_turn == 0 || now.saturating_sub(peer.last_turn) <= window
             });
         }
+    }
+}
+
+impl Default for Guard {
+    fn default() -> Self {
+        Self::new()
     }
 }

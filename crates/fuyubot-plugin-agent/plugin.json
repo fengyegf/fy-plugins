@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "fengyegf.agent",
   "name": "AI Agent",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "kind": "native",
   "entry": "bin/agent.dll",
   "abi": 6,
@@ -13,9 +13,9 @@
     "android-aarch64",
     "android-x86_64"
   ],
-  "optional_depends": ["fengyegf.llm"],
+  "depends": ["fengyegf.llm"],
   "provides": ["fengyegf.agent"],
-  "description": "Telegram 侧 AI Agent 运行时：私聊/话题会话、单次与循环推理、Bot-to-Bot 防环、会话 JSON 落盘，并把能力暴露成工具与共享服务。",
+  "description": "Telegram 侧 AI Agent 运行时：私聊/话题会话、单次与循环推理、Bot-to-Bot 防环、会话 JSON 落盘、历史压缩、长工具结果分页/字段过滤，并把能力暴露成工具与共享服务。",
   "homepage": "https://github.com/fengyegf/fy-plugins/tree/main/crates/fuyubot-plugin-agent",
   "config": "config.default.toml"
 }

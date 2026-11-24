@@ -1,7 +1,9 @@
 //! 插件配置：`[plugin.fengyegf.agent]` 段。
 //!
-//! 宿主已经把 `config.default.toml`、运行时落盘与用户配置合并好，
-//! 这里只负责把 JSON 解析成 Rust 结构并给出默认值（缺键不致命）。
+//! 设计取舍：Agent 的行为尽量确定，配置只留「部署环境真的会不同」的项。
+//! 会话历史默认**全量携带**（没有「每次带几条」这种旋钮），上下文太长用
+//! `/agent compress` 让模型把历史压成摘要；其余节奏 / 超时 / 截断长度都在
+//! [`crate::core::consts`] 里，不暴露成配置。
 
 use std::path::PathBuf;
 
@@ -9,6 +11,7 @@ use fuyubot_plugin_api::{HostApi, HostExt};
 use serde::{Deserialize, Serialize};
 
 use crate::PLUGIN_ID;
+use crate::core::consts;
 
 /// 回复形态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,142 +26,61 @@ pub enum ReplyMode {
 }
 
 /// 插件配置。
+///
+/// 只保留部署侧真的要改的键；删掉的键（`max_history` / `model_tools` /
+/// `stream_*` / `retry_*` 等）不再读取，用户配置里留着也不会报错。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub enabled: bool,
-    pub gateway_service: String,
+    /// 走网关的哪个方法：`chat` / `messages` / `responses`。
     pub gateway_method: String,
+    /// 空 = 用网关配置里的 `default_model`。
     pub model: String,
+    /// 系统提示词；留空则不注入 system 消息（富消息语法说明仍按需附加）。
     pub system_prompt: String,
-    /// 是否在系统提示后附加「Telegram 富消息支持的 Markdown 语法」说明。
-    pub format_guide: bool,
-    pub max_history: usize,
-    pub max_tokens: Option<u32>,
-    pub temperature: Option<f64>,
-    /// 是否把宿主工具表按协议下发给模型（true = 全部工具，按 `tool_denylist` 屏蔽个别）。
-    pub model_tools: bool,
-    /// 模型连续调用工具的最大轮数；用尽后再问一次且不再下发工具，逼它给结论。
-    pub max_tool_rounds: u32,
-    /// 不下发给模型的工具名：精确名，或以 `*` 结尾的前缀；空 = 全部下发。
-    pub tool_denylist: Vec<String>,
-    /// 单个工具结果回填给模型的最大字符数（防止一个工具把上下文撑爆）。
-    pub tool_result_max_chars: usize,
     pub reply_mode: ReplyMode,
-    /// 私聊是否用 TDLib 草稿消息（sendTextMessageDraft）做「Thinking… → 流式」。
+    /// 私聊是否用 TDLib 草稿消息做流式（群聊没有草稿能力，直接发终稿）。
     pub stream_replies: bool,
-    /// 流式草稿每次追加的字符数。
-    pub stream_chunk_chars: usize,
-    /// 流式草稿之间的间隔（毫秒）。
-    pub stream_interval_ms: u64,
-    /// 流式总时长上限（秒）；超过就整段补完，避免长文本拖太久。
-    pub stream_max_seconds: u64,
-    /// 是否给用户显示「停止生成」按钮（私有聊天草稿才有）。
-    pub stream_can_stop: bool,
-    /// 流式草稿用富消息（`sendRichMessageDraft`）；false 退回空文本草稿。
-    pub rich_drafts: bool,
-    /// 富消息前把 LaTeX（\(...\) / \[...\] / 单行 $$...$$）归一成宿主认识的写法。
-    pub normalize_math: bool,
-    /// 富草稿里 `inputPageBlockThinking` 块的文案。
-    pub thinking_text: String,
-    /// 网关提供流式方法（stream）时，私聊用真 token 流更新草稿。
-    pub gateway_stream: bool,
-    /// 一次流式会话的总超时（毫秒）。
-    pub stream_timeout_ms: u64,
-    /// 两次增量之间最多等多久（毫秒）；超时视为模型卡住。
-    pub stream_idle_timeout_ms: u64,
-    /// 流式轮询间隔（毫秒）。
-    pub stream_poll_ms: u64,
-    pub send_timeout_ms: u64,
-    pub action_timeout_ms: u64,
     pub allow_private: bool,
     pub allow_groups: bool,
+    /// 群里必须 @ 我或回复我的消息才接。
     pub group_require_mention: bool,
+    /// Bot-to-Bot 总开关（默认关）。
     pub allow_bots: bool,
+    /// 允许对话的对端 bot 用户名（不带 @）；空 = 只按 `allow_bots` 放行。
     pub bot_allowlist: Vec<String>,
-    pub bot_max_depth: u32,
-    pub bot_rate_limit_secs: u64,
-    pub dedupe_window_secs: u64,
+    /// 额外不下发给模型的工具名：精确名，或以 `*` 结尾的前缀。
+    /// 只能追加：`fuyubot.td.functions` 是内置屏蔽，删不掉。
+    pub tool_denylist: Vec<String>,
+    /// 私聊首条消息自动开一个话题（新会话）。
     pub topic_auto_create: bool,
-    pub topic_title_max_chars: usize,
-    /// 新对话首次聊天时用首条消息内容设置话题标题（不额外调用模型）。
-    pub topic_title_auto: bool,
-    pub topic_icon_color: i64,
+    /// 会话落盘目录；空 = `data/plugins/fengyegf.agent/sessions`。
     pub session_dir: String,
-    pub session_max_sessions: usize,
-    pub session_max_messages: usize,
-    /// 会话自动清理天数：超过这个天数没活动的会话会被删除；0 = 永久保留（不自动删）。
+    /// 会话自动清理天数；0 = 永久保留（不自动删、也不按数量修剪）。
     pub session_ttl_days: u64,
-    pub commands: bool,
-    pub tools: bool,
-    pub service: bool,
-    /// 首次失败后的重试次数（0 = 不重试，总共尝试 retry_times + 1 次）。
-    pub retry_times: u32,
-    /// 两次重试之间的等待（毫秒）。
-    pub retry_delay_ms: u64,
-    /// 重试耗尽后发给用户的文案；{times} = 重试次数，{error} = 失败原因。
-    pub failure_text: String,
-    pub max_reply_chars: usize,
-    pub loop_max_turns: u32,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             enabled: true,
-            gateway_service: "fengyegf.llm".to_owned(),
-            gateway_method: "chat".to_owned(),
+            gateway_method: consts::DEFAULT_GATEWAY_METHOD.to_owned(),
             model: String::new(),
             system_prompt:
                 "你是运行在 Telegram 里的 AI Agent。回答简洁、可执行；需要排版时用 Markdown。"
                     .to_owned(),
-            format_guide: true,
-            max_history: 20,
-            max_tokens: Some(1024),
-            temperature: Some(0.6),
-            model_tools: true,
-            max_tool_rounds: 4,
-            tool_denylist: Vec::new(),
-            tool_result_max_chars: 4000,
             reply_mode: ReplyMode::Rich,
             stream_replies: true,
-            stream_chunk_chars: 30,
-            stream_interval_ms: 200,
-            stream_max_seconds: 6,
-            stream_can_stop: true,
-            rich_drafts: true,
-            normalize_math: true,
-            thinking_text: "".to_owned(),
-            gateway_stream: true,
-            stream_timeout_ms: 120_000,
-            stream_idle_timeout_ms: 30_000,
-            stream_poll_ms: 50,
-            send_timeout_ms: 30_000,
-            action_timeout_ms: 15_000,
             allow_private: true,
             allow_groups: true,
             group_require_mention: true,
             allow_bots: false,
             bot_allowlist: Vec::new(),
-            bot_max_depth: 2,
-            bot_rate_limit_secs: 5,
-            dedupe_window_secs: 30,
+            tool_denylist: Vec::new(),
             topic_auto_create: true,
-            topic_title_max_chars: 24,
-            topic_title_auto: true,
-            topic_icon_color: 7_321_584,
             session_dir: String::new(),
-            session_max_sessions: 500,
-            session_max_messages: 200,
             session_ttl_days: 7,
-            commands: true,
-            tools: true,
-            service: true,
-            retry_times: 5,
-            retry_delay_ms: 800,
-            failure_text: "请求失败：{error}".to_owned(),
-            max_reply_chars: 3500,
-            loop_max_turns: 3,
         }
     }
 }
@@ -180,17 +102,9 @@ impl Config {
             }
         };
 
-        if config.gateway_service.trim().is_empty() {
-            config.gateway_service = "fengyegf.llm".to_owned();
-        }
         if config.gateway_method.trim().is_empty() {
-            config.gateway_method = "chat".to_owned();
+            config.gateway_method = consts::DEFAULT_GATEWAY_METHOD.to_owned();
         }
-        if config.max_history == 0 {
-            config.max_history = 20;
-        }
-        // 契约下限：单条消息 Telegram 上限 4096，留点余量。
-        config.max_reply_chars = config.max_reply_chars.clamp(200, 4000);
         config
     }
 
@@ -210,8 +124,8 @@ impl Config {
     /// 一行摘要（启动日志与 describe 用）。
     pub fn summary(&self) -> String {
         format!(
-            "网关 {}:{}，模型 {}，回复 {:?}，上下文 {}，会话目录 {}",
-            self.gateway_service,
+            "网关 {}:{}，模型 {}，回复 {:?}，会话目录 {}",
+            consts::GATEWAY_SERVICE,
             self.gateway_method,
             if self.model.trim().is_empty() {
                 "网关默认"
@@ -219,7 +133,6 @@ impl Config {
                 &self.model
             },
             self.reply_mode,
-            self.max_history,
             self.session_path().display()
         )
     }
