@@ -56,13 +56,13 @@ plugins/<id>/
 | [`fengyegf.musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.6 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
 | [`fengyegf.epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.6 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
 | [`fengyegf.kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.7 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
-| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.7 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
+| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.8 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
 | [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.2 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
 | [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
 | [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.2 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
 | [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.5 | 桌面三平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
 | [`fengyegf.llm`](crates/fuyubot-plugin-llm/README.md) | LLM Gateway | 0.1.1 | 全平台 | — | 零 AI SDK 的三大协议网关（OpenAI Chat / Responses / Anthropic Messages），提供工具、服务与流式 stream/stream_poll |
-| [`fengyegf.agent`](crates/fuyubot-plugin-agent/README.md) | AI Agent | 0.1.0 | 全平台 | fengyegf.llm（软） | Telegram 侧 Agent 运行时：富草稿流式、公式适配、AI 话题标题、会话 7 天自动清理（0=永久）、失败重试与原因回传、会话 JSON 落盘 |
+| [`fengyegf.agent`](crates/fuyubot-plugin-agent/README.md) | AI Agent | 0.1.1 | 全平台 | fengyegf.llm（软） | Telegram 侧 Agent 运行时：富草稿流式、公式适配、AI 话题标题、会话 7 天自动清理（0=永久）、失败重试与原因回传、会话 JSON 落盘 |
 
 平台口径：全平台 = `windows-x86_64` / `linux-x86_64` / `macos-aarch64` / `android-aarch64` /
 `android-x86_64`；桌面三平台 = 不含 Android。唯一来源是各 crate 的 `plugin.json`。
