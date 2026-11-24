@@ -35,3 +35,4 @@ pub use gateway::GatewayClient;
 pub use guard::{Guard, GuardVerdict};
 pub use prompt::PromptBuilder;
 pub use toolcall::ToolCall;
+pub use tools::RESERVED_TOOLS;

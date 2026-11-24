@@ -7,7 +7,7 @@ Telegram 侧的 **AI Agent 运行时**：把私聊 / 群话题接上大模型，
 - 插件 id：`fengyegf.agent`
 - crate：`fuyubot-plugin-agent`（`cdylib` + `rlib`，lib name `agent`）
 - ABI：v6
-- 版本：`0.1.0`
+- 版本：`0.1.1`
 - 软依赖：`fengyegf.llm`（网关不在场时降级为兜底文案，插件照常跑）
 
 ## 它负责什么、不负责什么
@@ -110,7 +110,7 @@ topic_auto_create = true
 | `temperature` | `0.6` | 空 = 不下发该字段 |
 | `model_tools` | `true` | 是否把宿主**全部工具**按协议下发给模型；关掉 = 纯文本对话（请求体不带 `tools`） |
 | `max_tool_rounds` | `4` | 模型连续调用工具的最大轮数；用尽后再问一次且不再下发工具，逼它给结论 |
-| `tool_denylist` | `[]` | 不下发的工具名：精确名或以 `*` 结尾的前缀（如 `fengyegf.agent.run`、`my.plugin.*`）；空 = 全部 |
+| `tool_denylist` | `[]` | 额外不下发的工具名：精确名或以 `*` 结尾的前缀（如 `fengyegf.agent.run`、`my.plugin.*`）；只能追加，`fuyubot.td.functions` 是内置屏蔽、删不掉 |
 | `tool_result_max_chars` | `4000` | 单个工具结果回填给模型的最大字符数，超出截断 |
 | `reply_mode` | `"rich"` | 终稿形态：`plain` / `markdown` / `rich`（失败逐级降级）。rich = `inputMessageRichMessage` |
 | `stream_replies` | `true` | 私聊用 TDLib 草稿消息做官方流式；关掉 = 直接发终稿 |
@@ -282,7 +282,7 @@ FFI 边界还有两个兜底码：`panic`（处理器 panic 被 `catch_unwind` �
   "plugin": "fengyegf.agent",
   "version": "0.1.0",
   "gateway": {"service": "fengyegf.llm", "method": "chat", "available": false},
-  "config": {"reply_mode": "markdown", "model": "", "max_history": 20, "allow_bots": false, "session_dir": "data/plugins/fengyegf.agent/sessions", "tools": true, "tool_count": 9, "tool_names": ["fengyegf.agent.chat", "…"], "tool_denylist": []},
+  "config": {"reply_mode": "markdown", "model": "", "max_history": 20, "allow_bots": false, "session_dir": "data/plugins/fengyegf.agent/sessions", "tools": true, "tool_count": 9, "tool_names": ["fengyegf.agent.chat", "…"], "tool_denylist": [], "tool_reserved": ["fuyubot.td.functions"]},
   "sessions": 7
 }
 ```
@@ -317,6 +317,10 @@ responses: `function_call_output`）再问一次，直到它给出文本。
 - **屏蔽**：`tool_denylist = []` 默认全发。挡一个写精确名，挡一族写 `前缀*`。
   注意 `fengyegf.agent.*` 是**本插件自己**的工具，全量下发时模型可以反过来调它
   （`.run` 还会再跑一轮推理，可能套娃），需要时把它们列进 denylist；
+- **内置屏蔽**：`fuyubot.td.functions` 这类「给插件作者用的通用 TDLib 大接口」**永远不下发**
+  （见 `agent::RESERVED_TOOLS`）。它的入参 schema 覆盖几百个 TDLib 函数，模型好奇心一上来
+  就会反复试探，一两轮就能把上下文撑爆；它也不是对话能力，`tool_denylist` 只能追加、解不开。
+  就算模型幻觉间直接点了它，执行层也会回一条错误文本，不会真的调宿主；
 - **失败也是内容**：工具报错回填成 `{"ok":false,"error":"…"}`，模型能换参数重试，
   不会让整轮请求失败；
 - **截断**：结果超过 `tool_result_max_chars` 截断并注明，避免一个工具撑爆上下文；

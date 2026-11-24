@@ -27,8 +27,9 @@ temperature = 0.6
 model_tools = true
 # 模型连续调用工具的最大轮数；用尽后再问一次且不再下发工具，逼它给结论。
 max_tool_rounds = 4
-# 不下发的工具名：精确名，或以 * 结尾的前缀（如 "fengyegf.agent.run"、"my.plugin.*"）。
-# 默认空 = 全部下发。注意 fengyegf.agent.* 系列工具会让模型反过来调本插件（可能套娃）。
+# 额外不下发给模型的工具名：精确名，或以 * 结尾的前缀（如 "fengyegf.agent.run"、"my.plugin.*"）。
+# 只能追加：fuyubot.td.functions 是内置屏蔽（原始 TDLib 调用，schema 巨大、会把上下文撑爆），
+# 这里留空或删掉都不会解除；注意 fengyegf.agent.* 系列会让模型反过来调本插件（可能套娃）。
 tool_denylist = []
 # 单个工具结果回填给模型的最大字符数，超出截断。
 tool_result_max_chars = 4000

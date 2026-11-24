@@ -1,6 +1,6 @@
 [package]
 name = "fuyubot-plugin-agent"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 rust-version.workspace = true
 description = "AI Agent 运行时：TDLib 会话 / 话题 + LLM 网关 + 会话落盘 + 对外工具与服务"

@@ -751,7 +751,7 @@ dependencies = [
 
 [[package]]
 name = "fuyubot-plugin-agent"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "fuyubot-plugin-api",
  "serde",

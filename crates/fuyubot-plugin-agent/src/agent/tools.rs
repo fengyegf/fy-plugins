@@ -4,9 +4,9 @@
 //! 为什么每次都现查：宿主工具表会随插件热插拔变化。缓存住名字等于让模型拿着
 //! 已卸载的工具去调，必然 `NoHandler`。
 //!
-//! 下发的是**全部工具**（可用 `tool_denylist` 屏蔽个别名字）：名字 / 描述 / 入参
-//! schema 全部来自宿主注册时给的 `ToolDescriptor`，本模块只做协议翻译，不另外
-//! 维护一份清单——否则两份清单迟早对不上。
+//! 下发的是**全部工具**（可用 `tool_denylist` 屏蔽个别名字；另有 [`RESERVED_TOOLS`]
+//! 这类内置屏蔽永远不下发）：名字 / 描述 / 入参 schema 全部来自宿主注册时给的
+//! `ToolDescriptor`，本模块只做协议翻译，不另外维护一份清单——否则两份清单迟早对不上。
 
 use fuyubot_plugin_api::HostApi;
 use serde_json::{Value, json};
@@ -22,6 +22,21 @@ pub struct ToolSpec {
     pub description: String,
     /// 入参 JSON Schema。
     pub input_schema: Value,
+}
+
+/// 面向插件作者、而不是给模型用的通用大接口：`fuyubot.td.functions` 是原始 TDLib
+/// 调用入口，入参 schema 覆盖几百个函数（体积按百 KB 计），模型看到就会反复试探，
+/// 一两轮就能把上下文撑爆。它属于框架提供给「别的插件」的能力，不是对话能力，
+/// 所以这里**内置屏蔽**：无论配置怎么写都不会下发给模型，`tool_denylist` 只能
+/// 在此基础上继续追加。
+pub const RESERVED_TOOLS: &[&str] = &["fuyubot.td.functions"];
+
+/// 是否属于内置屏蔽（去空白、大小写不敏感，防止宿主注册时大小写漂移）。
+pub fn is_reserved(name: &str) -> bool {
+    let name = name.trim();
+    RESERVED_TOOLS
+        .iter()
+        .any(|tool| tool.eq_ignore_ascii_case(name))
 }
 
 /// 宿主工具目录 + 同步执行入口。
@@ -68,6 +83,10 @@ impl ToolCatalog {
     /// 失败也是文本（`{"ok":false,"error":…}`）：把错误交给模型，让它自己决定
     /// 换参数重试还是放弃，比整轮失败对用户友好。
     pub fn call(&self, name: &str, arguments: &str) -> String {
+        // 双保险：模型凭记忆 / 幻觉直接点了内置屏蔽的工具时，也不真的调宿主。
+        if is_reserved(name) {
+            return error_text(&format!("工具 {name} 属于内置屏蔽的通用接口，不提供给模型"));
+        }
         if !self.specs.iter().any(|spec| spec.name == name) {
             return error_text(&format!("工具 {name} 不在本次下发的清单里，未执行"));
         }
@@ -100,7 +119,10 @@ fn parse_specs(raw: &str, denylist: &[String]) -> Vec<ToolSpec> {
         else {
             continue;
         };
-        if blocked(name, denylist) || specs.iter().any(|spec: &ToolSpec| spec.name == name) {
+        if is_reserved(name)
+            || blocked(name, denylist)
+            || specs.iter().any(|spec: &ToolSpec| spec.name == name)
+        {
             continue;
         }
         specs.push(ToolSpec {

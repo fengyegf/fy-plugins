@@ -211,6 +211,8 @@ fn describe(state: &PluginState) -> Value {
             "tool_count": state.engine.tool_count(),
             "tool_names": state.engine.tool_names(),
             "tool_denylist": config.tool_denylist,
+            // 内置屏蔽：永远不下发给模型的通用大接口（不是配置能解除的）。
+            "tool_reserved": crate::agent::RESERVED_TOOLS,
         },
         "sessions": state.store.count().unwrap_or(0),
     })

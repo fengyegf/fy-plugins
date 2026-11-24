@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "fengyegf.agent",
   "name": "AI Agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "kind": "native",
   "entry": "bin/agent.dll",
   "abi": 6,
