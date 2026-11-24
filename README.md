@@ -56,19 +56,47 @@ plugins/<id>/
 | [`fengyegf.musiccard`](crates/fuyubot-plugin-musiccard/README.md) | MusicCard | 0.1.6 | 全平台 | html2img（硬） | 生成网易云音乐卡片 |
 | [`fengyegf.epic`](crates/fuyubot-plugin-epic/README.md) | Epic | 0.1.6 | 全平台 | html2img（硬） | 生成 Epic 免费游戏卡片 |
 | [`fengyegf.kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.7 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
-| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.8 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片 |
+| [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.9 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片；提供方模板（`describe` / `invoke` 服务） |
 | [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.2 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
 | [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
 | [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.2 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
 | [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.5 | 桌面三平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
 | [`fengyegf.llm`](crates/fuyubot-plugin-llm/README.md) | LLM Gateway | 0.1.1 | 全平台 | — | 零 AI SDK 的三大协议网关（OpenAI Chat / Responses / Anthropic Messages），提供工具、服务与流式 stream/stream_poll |
-| [`fengyegf.agent`](crates/fuyubot-plugin-agent/README.md) | AI Agent | 0.1.1 | 全平台 | fengyegf.llm（软） | Telegram 侧 Agent 运行时：富草稿流式、公式适配、AI 话题标题、会话 7 天自动清理（0=永久）、失败重试与原因回传、会话 JSON 落盘 |
+| [`fengyegf.agent`](crates/fuyubot-plugin-agent/README.md) | AI Agent | 0.1.2 | 全平台 | fengyegf.llm（软） | Telegram 侧 Agent 运行时：富草稿流式、公式适配、AI 话题标题、会话 7 天自动清理（0=永久）、失败重试与原因回传、会话 JSON 落盘 |
 
 平台口径：全平台 = `windows-x86_64` / `linux-x86_64` / `macos-aarch64` / `android-aarch64` /
 `android-x86_64`；桌面三平台 = 不含 Android。唯一来源是各 crate 的 `plugin.json`。
 html2img 指宿主上的 `fuyubot.html2img` 插件（服务名同名），卡片类插件没有它不会出图。
 插件 id 采用 **作者.插件名** 命名：作者是仓库 owner `fengyegf`，所以 id 形如 `fengyegf.whois`，
 安装目录是 `plugins/<id>/`，配置段是 `[plugin.<id>]`（即 `[plugin.fengyegf.whois]`）。
+
+## 插件联动模板（provide_service_shared + call_service）
+
+跨插件联动按宿主文档 [插件联动](https://catmoecircle.github.io/FuyuBot-docs/docs/plugin/linkage)
+走命名服务：提供方 `provide_service_shared` 注册服务，消费方 `call_service` 按名字调，
+双方只共享「服务名 + 方法名 + JSON」。本仓库的约定很薄：**agent 当注册表**，提供方在
+自己的 `start()` 里注册一次，agent 拿着注册表与它交互——不需要新插件、也不需要公共库。
+
+**提供方**（完整实现：[`crates/fuyubot-plugin-system/src/api/mod.rs`](crates/fuyubot-plugin-system/src/api/mod.rs)）
+
+```rust
+// 1. provide_service_shared(自己的插件 id, &vtable)，方法 describe / invoke；
+// 2. host.call_service("fengyegf.agent", "register", 载荷)：
+//    {"name","description","input_schema","service","capability"}
+// 3. agent 不在 / 没开服务：只记一条 warn，插件单跑照常可用。
+```
+
+**消费方**（完整实现：[`crates/fuyubot-plugin-agent/src/agent/registry.rs`](crates/fuyubot-plugin-agent/src/agent/registry.rs)、[`crates/fuyubot-plugin-agent/src/agent/tools.rs`](crates/fuyubot-plugin-agent/src/agent/tools.rs)）
+
+```rust
+// 1. 收到 register：存进内存注册表（能力名 / schema / service + capability）；
+// 2. 每轮重建工具目录时读注册表，同名能力优先走服务通道；
+// 3. 模型点中：call_service(service, "invoke", {"capability":…,"input":…})；
+// 4. 失败退回 call_tool_result(能力名, …)（同名工具还在）。
+```
+
+约定：能力名与工具名一致（`fengyegf.system.info`），模型看到的工具名不变；注册是热的，
+提供方后启动也能补注册；`soft_inject` 只排启动顺序、不保证可用性，所以降级分支不能省。
 
 ## 使用说明
 
@@ -143,4 +171,5 @@ Release 的资产与标签不能再修改/替换，GitHub 还会自动生成 rel
 - 宿主：FuyuBot（ABI v6）与新版 `fuyubot-plugin-api`；`fuyubot-sdk check` 需与宿主同版本。
 - 卡片类插件：必须装 `fuyubot.html2img`（硬依赖，缺了停在 Pending）；`bidibot` 为软依赖，
   没装自动降级文字名片。
+- `agent`：硬依赖 `fengyegf.llm`（`Plugin::inject`）；没装 / 没启用 llm 插件时停在 Pending。
 - `ppxfy`：入库依赖 `storage.mongo`（mongo-plugin 提供），没装只是不入库。

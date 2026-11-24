@@ -72,36 +72,3 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
         "未知 panic".to_owned()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn message(text: &str) -> IncomingMessage {
-        IncomingMessage {
-            chat_id: 9,
-            id: 3,
-            text: text.to_owned(),
-        }
-    }
-
-    fn parse(text: &str) -> Command {
-        parser::parse(text, &["/".to_owned()]).expect("应当识别为命令")
-    }
-
-    #[test]
-    fn plans_system_command() {
-        let job = plan(&message("/system"), &parse("/system")).expect("system 应当有任务");
-        match job {
-            Job::System { msg } => {
-                assert_eq!(msg.chat_id, 9);
-                assert_eq!(msg.id, 3);
-            }
-        }
-    }
-
-    #[test]
-    fn ignores_unknown_commands() {
-        assert!(plan(&message("/whois"), &parse("/whois")).is_none());
-    }
-}

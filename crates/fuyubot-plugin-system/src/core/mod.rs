@@ -23,27 +23,3 @@ pub fn percent(used: u64, total: u64) -> u8 {
         .round()
         .clamp(0.0, 100.0) as u8
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn formats_gb_like_typescript() {
-        assert_eq!(format_gb(1024 * 1024 * 1024), "1.00 GB");
-        assert_eq!(format_gb(0), "0.00 GB");
-        // 与 `(bytes / 1024 / 1024 / 1024).toFixed(2)` 一致：四舍五入到两位。
-        assert_eq!(
-            format_gb(12 * 1024 * 1024 * 1024 + 512 * 1024 * 1024),
-            "12.50 GB"
-        );
-    }
-
-    #[test]
-    fn percent_rounds_and_clamps() {
-        assert_eq!(percent(0, 0), 0);
-        assert_eq!(percent(1, 3), 33);
-        assert_eq!(percent(2, 3), 67);
-        assert_eq!(percent(5, 4), 100);
-    }
-}

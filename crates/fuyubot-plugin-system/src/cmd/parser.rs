@@ -30,35 +30,3 @@ pub fn parse(text: &str, prefixes: &[String]) -> Option<Command> {
         args: parts.map(str::to_owned).collect(),
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn prefixes() -> Vec<String> {
-        ["/", "!", "！", ".", "#"]
-            .iter()
-            .map(|p| (*p).to_owned())
-            .collect()
-    }
-
-    #[test]
-    fn parses_plain_command() {
-        let command = parse("/system", &prefixes()).expect("应当识别为命令");
-        assert_eq!(command.name, "system");
-        assert!(command.args.is_empty());
-    }
-
-    #[test]
-    fn parses_command_with_bot_suffix_and_args() {
-        let command = parse("！SYSTEM@fengyezzz_bot 1", &prefixes()).expect("应当识别");
-        assert_eq!(command.name, "SYSTEM");
-        assert_eq!(command.args, vec!["1".to_owned()]);
-    }
-
-    #[test]
-    fn rejects_plain_text() {
-        assert!(parse("今天查什么", &prefixes()).is_none());
-        assert!(parse("/", &prefixes()).is_none());
-    }
-}

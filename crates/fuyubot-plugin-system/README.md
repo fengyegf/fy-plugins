@@ -1,6 +1,6 @@
 # System
 
-插件 id：`fengyegf.system` ｜ 版本：0.1.7 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
+插件 id：`fengyegf.system` ｜ 版本：0.1.9 ｜ ABI：v6 ｜ 平台：windows-x86_64 / linux-x86_64 / macos-aarch64 / android-aarch64 / android-x86_64
 
 ## 项目介绍
 
@@ -101,23 +101,47 @@ cargo build --release -p fuyubot-plugin-system
 python scripts/package.py --plugin system --platform windows-x86_64
 ```
 
-产出 `target/release/system.dll` 与 `fengyegf.system-0.1.7-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/system.dll`）。
+产出 `target/release/system.dll` 与 `fengyegf.system-0.1.9-windows-x86_64.zip`（根为 `plugin.json`、`config.default.toml`、`bin/system.dll`）。
 
 **发布**
 
 ```bash
-git tag fengyegf.system-v0.1.7
-git push origin fengyegf.system-v0.1.7
+git tag fengyegf.system-v0.1.9
+git push origin fengyegf.system-v0.1.9
 ```
 
 tag 名固定为 `<id>-v<version>`；同一版本已打过 tag 时，先递增 `plugin.json` 的版本号再打新 tag。
+
+## 对外接口（工具 + 共享服务）
+
+| 通道 | 名字 | 谁用 | 注册方式 | 说明 |
+| --- | --- | --- | --- | --- |
+| 工具 | `fengyegf.system.info` | 宿主 / AI | `register_tool` | 模型可见，无参数 |
+| 共享服务 | `fengyegf.system` | 其它插件 | `provide_service_shared` | 方法 `describe` / `invoke` / `info` |
+
+服务形状是仓库里的**提供方模板**，源码就是 `src/api/mod.rs`：
+
+- `describe` → `{"ok":true,"service":"fengyegf.system","version":…,"protocol":"fuyubot.service/1",
+  "methods":["describe","invoke","info"],"capabilities":[{"name":"fengyegf.system.info",
+  "description":…,"input_schema":…}]}`
+- `invoke` → 入参 `{"capability":"fengyegf.system.info","input":{}}`，成功回
+  `{"ok":true,"capability":…,"data":{…}}`，失败回 `{"ok":false,"code":"not_found|invalid","error":…}`
+- `info` 是历史方法，保留是为「协议字段只增不改」；新调用方请用 `invoke`
+
+消费方不链接本插件、不共享 Rust 类型：先 `list_services()` 找到同时提供 `describe` / `invoke` 的服务，
+再 `call_service("fengyegf.system", "describe", "{}")` 拿能力清单，最后
+`call_service("fengyegf.system", "invoke", {"capability":…,"input":…})` 当场取结果
+（agent 插件的 `src/agent/tools.rs` 就是消费方模板）。
+
+本插件启动时还会调一次 `call_service("fengyegf.agent", "register", …)`，把
+`fengyegf.system.info` 登记进 **agent 的能力注册表**；agent 不在 / 没开服务时只记一条
+warn，插件单跑照常可用（`soft_inject` 只排启动顺序，不保证可用性）。
 
 ## 项目依赖（软/硬）
 
 | 类型 | 服务名 | 说明 |
 | --- | --- | --- |
 | 硬依赖 | `fuyubot.html2img` | 调 `render` 出图；经 `Plugin::inject` 声明，未安装时插件停在 Pending |
-| 软依赖 | `fuyubot.host.commands` | 登记 `/system` 供 `/help` 展示；登记失败只记 warn |
 | 宿主内建（不算插件依赖） | `fuyubot.host.command` | 命令回复通道，发新消息 / 编辑原消息 / ephemeral 由宿主决定 |
 | 宿主内建（不算插件依赖） | TDLib `invoke`＋`response`、`list_plugins` | 取 TDLib 版本、机器人 / 管理员资料与插件清单 |
 | 外部条件 | 公网可达 | `background_url` 由 html2img 拉取，非公网 `http(s)` 时自动丢弃 |

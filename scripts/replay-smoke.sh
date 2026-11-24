@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# 离线回放冒烟（不接账号、不连 TDLib）：把本仓刚编出来的 7 个插件 + 宿主安装目录里的
+# 离线回放冒烟（不接账号、不连 TDLib）：把本仓刚编出来的 9 个插件 + 宿主安装目录里的
 # html2img（卡片渲染的硬依赖）装进临时插件目录，再用给定宿主跑一遍 --replay。
+# fengyegf.agent 硬依赖 fengyegf.llm（网关），所以 llm 也要一起装，否则 agent 停在 Pending。
 #
 # 用法：scripts/replay-smoke.sh <fuyubot 安装目录> [replay.json]
 #   <fuyubot 安装目录>  含 fuyubot.exe 与 plugins/ 的目录（宿主需 ABI v6 / 0.1.4+）
@@ -38,6 +39,7 @@ stage fengyegf.ppxfy     ppxfy     ppxfy.dll     bin/ppxfy.dll
 stage fengyegf.system    system    system.dll    bin/system.dll
 stage fengyegf.trending  trending  trending.dll  bin/trending.dll
 stage fengyegf.whois     whois     whois.dll     bin/whois.dll
+stage fengyegf.llm       llm       llm.dll       bin/llm.dll
 stage fengyegf.agent     agent     agent.dll     bin/agent.dll
 
 # html2img 是 epic / kfc / musiccard / system / trending / whois 的硬依赖（不在本仓），从宿主目录借一份；

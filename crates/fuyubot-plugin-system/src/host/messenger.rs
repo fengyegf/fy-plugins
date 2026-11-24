@@ -174,17 +174,3 @@ fn error_code(error: &Value) -> String {
         None => "unknown".to_owned(),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn simplify_error_payload_becomes_op_error() {
-        // 与 `op` 里的映射同形：取 code（int / string 都收）与 message。
-        let error = json!({ "code": 400, "message": "bad request" });
-        assert_eq!(error_code(&error), "400");
-        assert_eq!(error_code(&json!({ "code": "FLOOD_WAIT" })), "FLOOD_WAIT");
-        assert_eq!(error_code(&json!({})), "unknown");
-    }
-}

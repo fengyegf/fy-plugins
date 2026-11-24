@@ -76,16 +76,11 @@ impl Plugin for SystemPlugin {
         help::register(&self.host);
 
         // 对外接口：工具（模型可见）+ 共享服务（其它插件可调）。
-        let service = api::SystemService::new();
-        let handle = self
-            .host
-            .provide_service_shared(api::SERVICE_NAME, service.vtable_ptr());
-        if handle.is_valid() {
-            self.service = Some(service);
-        } else {
-            self.host.warn("system: 注册共享服务 fengyegf.system 失败");
-        }
+        // 服务形状（describe / invoke）与注册方式见 api 模块文档——那就是提供方模板。
+        self.service = api::SystemService::register(&self.host);
         self.tools = api::register_tools(&self.host);
+        // 反过来：把自己的能力注册进 agent 的注册表（agent 不在就只记一条 warn）。
+        api::register_with_agent(&self.host);
         self.host.info(&format!(
             "system: 对外接口就绪（工具 {} 个，服务 {}）",
             self.tools.len(),
@@ -107,6 +102,14 @@ impl Plugin for SystemPlugin {
     /// 而不是启动后每条命令都渲染失败。
     fn inject() -> Vec<String> {
         vec![render::html2img::SERVICE.to_owned()]
+    }
+
+    /// 软依赖 agent：希望它先起来，好把本插件的能力注册进它的注册表。
+    ///
+    /// 只排启动顺序、不保证可用性（文档「软依赖管排队，不管可用性」）：
+    /// agent 缺失或没开服务时，注册失败只记一条 warn，插件照常跑。
+    fn soft_inject() -> Vec<String> {
+        vec!["fengyegf.agent".to_owned()]
     }
 }
 
