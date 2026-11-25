@@ -35,16 +35,14 @@ stage() { # $1=插件 id（作者.插件名） $2=crate 短名 $3=target/debug �
 stage fengyegf.epic      epic      epic.dll      bin/epic.dll
 stage fengyegf.kfc       kfc       kfc.dll       bin/kfc.dll
 stage fengyegf.musiccard musiccard musiccard.dll bin/musiccard.dll
-stage fengyegf.ppxfy     ppxfy     ppxfy.dll     bin/ppxfy.dll
 stage fengyegf.system    system    system.dll    bin/system.dll
 stage fengyegf.trending  trending  trending.dll  bin/trending.dll
 stage fengyegf.whois     whois     whois.dll     bin/whois.dll
 stage fengyegf.llm       llm       llm.dll       bin/llm.dll
 stage fengyegf.agent     agent     agent.dll     bin/agent.dll
 
-# html2img 是 epic / kfc / musiccard / system / trending / whois 的硬依赖（不在本仓），从宿主目录借一份；
-# fuyubot.mongo 是 ppxfy 的可选软依赖，一并带上，缺了也不影响启动。
-for bundle in "$HOST_DIR"/plugins/fuyubot.html2img*/ "$HOST_DIR"/plugins/fuyubot.mongo/; do
+# html2img 是 epic / kfc / musiccard / system / trending / whois 的硬依赖（不在本仓），从宿主目录借一份。
+for bundle in "$HOST_DIR"/plugins/fuyubot.html2img*/; do
   if [ -d "$bundle" ]; then cp -r "$bundle" "$OUT/plugins/"; fi
 done
 if ! ls -d "$OUT"/plugins/fuyubot.html2img* >/dev/null 2>&1; then

@@ -2,7 +2,7 @@
 
 ## 项目介绍
 
-fy-plugins 是一个 Cargo workspace，包含 11 个可独立构建、独立发布、独立加载的 FuyuBot 原生插件，
+fy-plugins 是一个 Cargo workspace，包含 10 个可独立构建、独立发布、独立加载的 FuyuBot 原生插件，
 全部用 Rust 编写（一个插件 = 一个 cdylib）。插件通过 FuyuBot 宿主的 Native ABI v6 导出符号与
 宿主通信，卡片类插件的界面统一交给宿主上的 `fuyubot.html2img` 服务渲染，插件自身不带渲染引擎。
 
@@ -58,7 +58,6 @@ plugins/<id>/
 | [`fengyegf.kfc`](crates/fuyubot-plugin-kfc/README.md) | KFC | 0.1.7 | 全平台 | html2img（硬） | 抓一句肯德基疯话，渲染成推特卡片 |
 | [`fengyegf.system`](crates/fuyubot-plugin-system/README.md) | System | 0.1.9 | 全平台 | html2img（硬） | 查看宿主机与机器人状态，渲染成信息卡片；提供方模板（`describe` / `invoke` 服务） |
 | [`fengyegf.trending`](crates/fuyubot-plugin-trending/README.md) | GitHub Trending | 0.1.2 | 全平台 | html2img（硬） | 抓 GitHub Trending 榜单，渲染成卡片墙 |
-| [`fengyegf.ppxfy`](crates/fuyubot-plugin-ppxfy/README.md) | PPXFY | 0.1.6 | 桌面三平台 | storage.mongo（软） | 从 DMM / DLSite 下载并解压作品，记录与 Telegraph 上传 |
 | [`fengyegf.bidibot`](crates/fuyubot-plugin-bidibot/README.md) | Bidibot 双向私聊 | 0.1.2 | 全平台 | html2img（软） | 论坛群话题式中转：私聊进话题、主人在话题里回复回用户 |
 | [`fengyegf.rusto`](crates/fuyubot-plugin-rusto/README.md) | RustO OCR | 0.1.5 | 桌面三平台 | — | 纯 Rust OCR，发图出文本，并提供 `rusto.ocr` 服务 |
 | [`fengyegf.llm`](crates/fuyubot-plugin-llm/README.md) | LLM Gateway | 0.1.1 | 全平台 | — | 零 AI SDK 的三大协议网关（OpenAI Chat / Responses / Anthropic Messages），提供工具、服务与流式 stream/stream_poll |
@@ -172,4 +171,3 @@ Release 的资产与标签不能再修改/替换，GitHub 还会自动生成 rel
 - 卡片类插件：必须装 `fuyubot.html2img`（硬依赖，缺了停在 Pending）；`bidibot` 为软依赖，
   没装自动降级文字名片。
 - `agent`：硬依赖 `fengyegf.llm`（`Plugin::inject`）；没装 / 没启用 llm 插件时停在 Pending。
-- `ppxfy`：入库依赖 `storage.mongo`（mongo-plugin 提供），没装只是不入库。

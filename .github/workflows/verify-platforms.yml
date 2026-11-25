@@ -26,8 +26,6 @@ jobs:
           - { plugin: epic, platform: macos-aarch64, os: macos-15 }
           - { plugin: kfc, platform: linux-x86_64, os: ubuntu-latest }
           - { plugin: kfc, platform: macos-aarch64, os: macos-15 }
-          - { plugin: ppxfy, platform: linux-x86_64, os: ubuntu-latest }
-          - { plugin: ppxfy, platform: macos-aarch64, os: macos-15 }
           - { plugin: system, platform: linux-x86_64, os: ubuntu-latest }
           - { plugin: system, platform: macos-aarch64, os: macos-15 }
           - { plugin: rusto, platform: linux-x86_64, os: ubuntu-latest }
