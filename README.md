@@ -68,6 +68,8 @@ plugins/<id>/
 html2img 指宿主上的 `fuyubot.html2img` 插件（服务名同名），卡片类插件没有它不会出图。
 插件 id 采用 **作者.插件名** 命名：作者是仓库 owner `fengyegf`，所以 id 形如 `fengyegf.whois`，
 安装目录是 `plugins/<id>/`，配置段是 `[plugin.<id>]`（即 `[plugin.fengyegf.whois]`）。
+命令头统一由宿主 `[command].prefix` 配置并归一化成 `/cmd`；插件只解析归一化后的文本，
+不再在 `[plugin.<id>]` 里维护 `prefixes`。
 
 ## 插件联动模板（provide_service_shared + call_service）
 

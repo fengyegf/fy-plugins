@@ -26,7 +26,7 @@ crates/fuyubot-plugin-trending/
    ├─ lib.rs                   # Plugin 实现、订阅 updateNewMessage、启停
    ├─ help.rs                  # 把 /trending 登记进宿主命令表
    ├─ host/                    # mod.rs、worker.rs、messenger.rs、command.rs
-   ├─ cmd/                     # parser.rs（前缀 / @机器人）、trending.rs（业务）
+   ├─ cmd/                     # parser.rs（归一化命令 / @机器人）、trending.rs（业务）
    ├─ core/                    # config.rs、fetch.rs、parse.rs、model.rs、avatar.rs
    └─ render/                  # mod.rs、html2img.rs
 ```
@@ -46,7 +46,7 @@ plugins/fengyegf.trending/
 | --- | --- | --- |
 | `/trending [周期]` | 无权限判断（登记 `role=user`），私聊 / 群聊 | 抓指定周期榜单，出 4 列卡片墙并以照片回复 |
 
-`/trending@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀；参数不认识时回用法提示，不猜用户意图。命令前缀来自 `[plugin.fengyegf.trending].prefixes`，未配置时跟随宿主 `[config].PREFIXES`。
+`/trending@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀；参数不认识时回用法提示，不猜用户意图。命令头由宿主 `[command].prefix` 统一识别并归一化成 `/cmd`，插件不再读取自己的 `prefixes`。
 
 ## 配置一览
 
@@ -60,7 +60,6 @@ plugins/fengyegf.trending/
 | `max_items` | `15` | 最多渲染几条，夹到 `1`–`30`；版面硬上限也是 15 |
 | `avatar` | `true` | 是否抓作者头像；关掉用首字母方块兜底，出图更快 |
 | `avatar_timeout_ms` | `6000` | 头像抓取整体预算（毫秒），夹到 `500`–`20000` |
-| `prefixes` | `["/", "!", "！", ".", "#"]` | 命令前缀；不写则跟随宿主 `[config].PREFIXES` |
 
 ## 使用说明
 

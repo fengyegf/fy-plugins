@@ -42,7 +42,7 @@ fn handle_private(ctx: &Arc<Ctx>, message: &IncomingMessage, config: &Config) {
     }
     // 命令行一律不中转：/start、/help、别的插件的命令、打错的命令都一样。
     // 以前只有插件认得的命令被吃掉，其余会被当成普通消息转发进群，群里会看到一堆 /xxx。
-    if crate::cmd::parser::parse(&message.text, &config.prefixes).is_some() {
+    if crate::cmd::parser::parse(&message.text).is_some() {
         ctx.debug(&format!(
             "bidibot: 用户 {user_id} 发的是命令，不中转：{}",
             message.text
@@ -219,7 +219,7 @@ fn handle_group(ctx: &Arc<Ctx>, message: &IncomingMessage, config: &Config) {
         return;
     }
     // 群里的命令行也不往用户那边发（没被命令层吃掉的命令 = 不认识的命令）。
-    if crate::cmd::parser::parse(&message.text, &config.prefixes).is_some() {
+    if crate::cmd::parser::parse(&message.text).is_some() {
         ctx.debug(&format!(
             "bidibot: 群里收到命令，不转给用户：{}",
             message.text

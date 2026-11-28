@@ -487,8 +487,8 @@ responses: `function_call_output`）再问一次，直到它给出文本。
 worker 里，只在它拦下后处理，不触发推理。
 
 > 本插件订阅的是原始 `updateNewMessage`，命令文本由自己的 `core::parse_command` 解析，
-> **只认 `/` 前缀**（`/agent …`）。宿主 `[command].prefix` 的归一化作用于宿主命令表，
-> 不改变这里的解析——user 账户把前缀改成 `.` 时，`/agent` 仍然可用，`.agent` 不会进来。
+> **只认宿主归一化后的 `/` 前缀**（`/agent …`）。`[command].prefix` 里的 `.`、`!` 等命令头
+> 由宿主先归一化成 `/agent`，插件不再重复读取或维护前缀表。
 
 | 子命令 | 别名 | 作用 |
 | --- | --- | --- |

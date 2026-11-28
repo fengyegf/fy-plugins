@@ -150,7 +150,7 @@ fn dispatch(ctx: &Arc<Ctx>, handles: &Handles, update: Value) {
     if message.is_outgoing {
         return;
     }
-    let Some(parsed) = cmd::parser::parse(&message.text, &ctx.config.prefixes) else {
+    let Some(parsed) = cmd::parser::parse(&message.text) else {
         return;
     };
     let Some(job) = cmd::plan(&message, &parsed) else {

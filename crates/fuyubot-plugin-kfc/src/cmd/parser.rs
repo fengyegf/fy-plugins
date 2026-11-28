@@ -1,7 +1,7 @@
 //! 命令解析。
 //!
-//! Rust 侧 ABI 没有 TS 版那套 `cmdHandlers`，命令就是普通文本消息，所以前缀与
-//! 名称在这里解析：支持配置里的多个前缀（缺省 `/ ! ！ . #`）、`@机器人名` 后缀。
+//! 宿主已按 `[command].prefix` 识别命令头，并统一归一化成 `/name`；这里只拆分
+//! 命令名与参数，并剥掉群聊里的 `@机器人名` 后缀。
 
 /// 一条解析出来的命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,15 +12,9 @@ pub struct Command {
     pub args: Vec<String>,
 }
 
-/// 解析文本命令；不是命令（没有前缀）返回 `None`。
-pub fn parse(text: &str, prefixes: &[String]) -> Option<Command> {
-    let text = text.trim();
-    let prefix = prefixes
-        .iter()
-        .filter(|prefix| !prefix.is_empty())
-        .find(|prefix| text.starts_with(prefix.as_str()))?;
-
-    let mut parts = text[prefix.len()..].split_whitespace();
+/// 解析宿主归一化后的文本命令；不是 `/cmd` 返回 `None`。
+pub fn parse(text: &str) -> Option<Command> {
+    let mut parts = text.trim().strip_prefix('/')?.split_whitespace();
     let name = parts.next()?.split('@').next()?.to_owned();
     if name.is_empty() {
         return None;
@@ -35,30 +29,24 @@ pub fn parse(text: &str, prefixes: &[String]) -> Option<Command> {
 mod tests {
     use super::*;
 
-    fn prefixes() -> Vec<String> {
-        ["/", "!", "！", ".", "#"]
-            .iter()
-            .map(|p| (*p).to_owned())
-            .collect()
-    }
-
     #[test]
     fn parses_plain_command() {
-        let command = parse("/kfc", &prefixes()).expect("应当识别为命令");
+        let command = parse("/kfc").expect("应当识别为命令");
         assert_eq!(command.name, "kfc");
         assert!(command.args.is_empty());
     }
 
     #[test]
     fn parses_command_with_bot_suffix_and_args() {
-        let command = parse("！KFC@fuyu_bot 来一份", &prefixes()).expect("应当识别为命令");
+        let command = parse("/KFC@fuyu_bot 来一份").expect("应当识别为命令");
         assert_eq!(command.name, "KFC");
         assert_eq!(command.args, vec!["来一份".to_owned()]);
     }
 
     #[test]
-    fn rejects_plain_text() {
-        assert!(parse("今天吃什么", &prefixes()).is_none());
-        assert!(parse("/", &prefixes()).is_none());
+    fn only_accepts_host_normalized_slash_prefix() {
+        assert!(parse("今天吃什么").is_none());
+        assert!(parse("!kfc").is_none());
+        assert!(parse("/").is_none());
     }
 }

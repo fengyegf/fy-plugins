@@ -1,7 +1,7 @@
 //! 收件箱与调度。
 //!
 //! 宿主回调只做一件事：把更新丢进 channel。剩下都在这里：
-//! 解析成 [`IncomingMessage`]、按前缀解析命令、为每条命令开一个短命线程跑完整流程。
+//! 解析成 [`IncomingMessage`]、解析命令、为每条命令开一个短命线程跑完整流程。
 
 use std::ffi::{c_char, c_void};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -148,7 +148,7 @@ fn dispatch(ctx: &Arc<Ctx>, handles: &Handles, update: Value) {
     let Some(message) = IncomingMessage::parse(&update) else {
         return;
     };
-    let Some(command) = cmd::parser::parse(&message.text, &ctx.config.prefixes) else {
+    let Some(command) = cmd::parser::parse(&message.text) else {
         return;
     };
     let Some(job) = cmd::plan(&message, &command) else {

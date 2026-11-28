@@ -1,7 +1,6 @@
 //! 插件配置。
 //!
-//! 全部来自宿主的 `[plugin.fengyegf.epic]` 段（`fuyubot.toml`），命令前缀复用顶层
-//! `[config] PREFIXES`。
+//! 全部来自宿主的 `[plugin.fengyegf.epic]` 段（`fuyubot.toml`）。
 //!
 //! ```toml
 //! [plugin.fengyegf.epic]
@@ -32,9 +31,6 @@ pub const PLUGIN_NAME: &str = "fengyegf.epic";
 pub const DEFAULT_API_URL: &str =
     "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions";
 
-/// 默认命令前缀。
-const DEFAULT_PREFIXES: [&str; 5] = ["/", "!", "！", ".", "#"];
-
 /// 运行期配置（构造一次，之后只读）。
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -50,8 +46,6 @@ pub struct Config {
     pub proxy: Option<String>,
     /// 单次 HTTP 超时。
     pub timeout: Duration,
-    /// 命令前缀。
-    pub prefixes: Vec<String>,
     /// 输出缩放倍数。
     pub scale: f32,
     /// 每行卡片数。
@@ -77,7 +71,6 @@ impl Default for Config {
             timezone_offset_hours: 8,
             proxy: None,
             timeout: Duration::from_millis(20_000),
-            prefixes: DEFAULT_PREFIXES.iter().map(|p| (*p).to_owned()).collect(),
             scale: 2.0,
             max_per_row: 4,
             max_cards: 8,
@@ -141,26 +134,6 @@ impl Config {
         if let Some(proxy) = text(&section, &["proxy", "PROXY"]) {
             config.proxy = (!proxy.trim().is_empty()).then(|| proxy.trim().to_owned());
         }
-        // 前缀位于宿主的顶层 `[config]` 段。
-        if let Some(value) = host
-            .config_value("", "config.PREFIXES")
-            .or_else(|| host.config_value("", "config.prefixes"))
-        {
-            let list: Vec<String> = value
-                .as_array()
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default();
-            if !list.is_empty() {
-                config.prefixes = list;
-            }
-        }
-
         host.info(&format!(
             "epic: 配置 locale={} country={} 时区=UTC{:+} 缩放={} 每行={} 上限={}",
             config.locale,

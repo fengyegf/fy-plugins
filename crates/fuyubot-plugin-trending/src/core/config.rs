@@ -10,12 +10,10 @@
 //! max_items    = 15      # 最多渲染几条
 //! avatar       = true    # 是否抓仓库作者头像（关掉用首字母兜底，出图更快）
 //! avatar_timeout_ms = 6000  # 头像抓取的整体预算
-//! prefixes     = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
 //! ```
 //!
 //! 读取顺序：`start()` 传进来的配置 JSON → `get_config("fengyegf.trending", "")` 兜底；
-//! 两者缺什么就各自退回缺省值。命令前缀的第三层兜底是宿主顶层
-//! `[config].PREFIXES`。
+//! 两者缺什么就各自退回缺省值。
 
 use std::time::Duration;
 
@@ -27,9 +25,6 @@ pub const PLUGIN_NAME: &str = "fengyegf.trending";
 
 /// 榜单页缺省地址（`?since=daily|weekly|monthly` 由抓取层拼）。
 pub const DEFAULT_TRENDING_URL: &str = "https://github.com/trending";
-
-/// 命令前缀缺省值，与宿主 `[config].PREFIXES` 的缺省一致。
-const DEFAULT_PREFIXES: [&str; 5] = ["/", "!", "！", ".", "#"];
 
 /// 卡片宽度缺省值：1600px 刚好排 4 列 372px 的卡片。
 const DEFAULT_WIDTH: u32 = 1600;
@@ -73,8 +68,6 @@ pub struct Config {
     pub avatar: bool,
     /// 头像抓取的整体预算（并发抓完为止）。
     pub avatar_timeout: Duration,
-    /// 命令前缀。
-    pub prefixes: Vec<String>,
 }
 
 impl Default for Config {
@@ -86,7 +79,6 @@ impl Default for Config {
             max_items: DEFAULT_MAX_ITEMS,
             avatar: DEFAULT_AVATAR,
             avatar_timeout: DEFAULT_AVATAR_TIMEOUT,
-            prefixes: DEFAULT_PREFIXES.iter().map(|p| (*p).to_owned()).collect(),
         }
     }
 }
@@ -95,55 +87,29 @@ impl Config {
     /// 从宿主读配置；缺失或类型不对就退回缺省值并记一条日志。
     pub fn load(host: &HostApi, config_json: &str) -> Self {
         let mut config = Self::default();
-        let mut prefixes_configured = false;
 
         if let Ok(value) = serde_json::from_str::<Value>(config_json)
             && value.is_object()
         {
-            prefixes_configured |= config.apply(&value);
+            config.apply(&value);
         }
         // 再走一遍配置读接口兜底（start 传空串时就需要它）。
         if let Some(value) = host.config_value(PLUGIN_NAME, "") {
-            prefixes_configured |= config.apply(&value);
-        }
-
-        // 前缀：插件段里没写就跟随宿主顶层 `[config].PREFIXES`。
-        if !prefixes_configured
-            && let Some(value) = host
-                .config_value("", "config.PREFIXES")
-                .or_else(|| host.config_value("", "config.prefixes"))
-        {
-            let list: Vec<String> = value
-                .as_array()
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .filter(|prefix| !prefix.is_empty())
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default();
-            if !list.is_empty() {
-                config.prefixes = list;
-            }
+            config.apply(&value);
         }
 
         host.info(&format!(
-            "trending: 配置 地址={} 宽度={}px 超时={}s 条数={} 前缀={:?}",
+            "trending: 配置 地址={} 宽度={}px 超时={}s 条数={}",
             config.trending_url,
             config.width,
             config.timeout.as_secs(),
-            config.max_items,
-            config.prefixes
+            config.max_items
         ));
         config
     }
 
-    /// 应用一个配置对象（插件段）；返回「有没有显式写 prefixes」。
-    fn apply(&mut self, value: &Value) -> bool {
-        let mut prefixes_configured = false;
-
+    /// 应用一个配置对象（插件段）。
+    fn apply(&mut self, value: &Value) {
         if let Some(url) = pick_str(value, &["trending_url", "TRENDING_URL", "url"])
             && url.starts_with("http")
         {
@@ -175,20 +141,6 @@ impl Config {
             self.avatar_timeout =
                 Duration::from_millis(timeout).clamp(MIN_AVATAR_TIMEOUT, MAX_AVATAR_TIMEOUT);
         }
-        if let Some(items) = pick_value(value, &["prefixes", "PREFIXES"]).and_then(Value::as_array)
-        {
-            let list: Vec<String> = items
-                .iter()
-                .filter_map(Value::as_str)
-                .filter(|prefix| !prefix.is_empty())
-                .map(str::to_owned)
-                .collect();
-            if !list.is_empty() {
-                self.prefixes = list;
-                prefixes_configured = true;
-            }
-        }
-        prefixes_configured
     }
 }
 
@@ -233,7 +185,6 @@ mod tests {
         assert_eq!(config.trending_url, DEFAULT_TRENDING_URL);
         assert_eq!(config.width, 1600);
         assert_eq!(config.max_items, 15);
-        assert_eq!(config.prefixes, ["/", "!", "！", ".", "#"]);
     }
 
     #[test]
@@ -242,16 +193,6 @@ mod tests {
         assert_eq!(apply(r#"{"width": 9000}"#).width, MAX_WIDTH);
         assert_eq!(apply(r#"{"width": 1400}"#).width, 1400);
         assert_eq!(apply(r#"{"WIDTH": "1500"}"#).width, 1500);
-    }
-
-    #[test]
-    fn prefixes_are_only_flagged_when_present() {
-        let mut config = Config::default();
-        let written = config.apply(&serde_json::from_str(r#"{"width": 1300}"#).unwrap());
-        assert!(!written);
-        let written = config.apply(&serde_json::from_str(r#"{"prefixes": [";"]}"#).unwrap());
-        assert!(written);
-        assert_eq!(config.prefixes, [";"]);
     }
 
     #[test]

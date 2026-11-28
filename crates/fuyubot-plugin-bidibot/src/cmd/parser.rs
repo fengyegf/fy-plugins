@@ -1,11 +1,11 @@
-//! 命令前缀解析。
+//! 命令文本解析。
 //!
-//! 这里只做"文本 → 命令名 + 参数"的机械翻译，不认任何具体命令名：前缀表来自配置
-//! （`[plugin.fengyegf.bidibot].prefixes`），分派留给 [`crate::cmd`]。
+//! 这里只做"文本 → 命令名 + 参数"的机械翻译，不认任何具体命令名。命令头由宿主
+//! 按 `[command].prefix` 识别并统一归一化成 `/cmd`，分派留给 [`crate::cmd`]。
 //!
-//! 为什么按前缀解析而不是按 Telegram 的 bot_command entity：宿主投给插件的是纯文本
-//! 消息，用户手打 `/bidihelp` 和点菜单发出来的命令都要能认；统一按前缀处理还能让
-//! 配置里的前缀（`!` `！` `.` `#` …）改了立刻生效，不用改代码。
+//! 为什么按 `/` 命令头解析而不是按 Telegram 的 bot_command entity：宿主投给插件的是
+//! 纯文本消息，用户手打 `/bidihelp` 和点菜单发出来的命令都要能认；统一处理还能让
+//! 宿主配置的命令头改了立刻生效，不用改代码。
 //!
 //! 输入是外部内容，所以所有"空 / 超长 / 缺名字 / 引号没闭合"的情况都只返回 `None`
 //! 或做宽容处理，绝不让一条坏消息把业务线程打挂。
@@ -25,21 +25,13 @@ pub struct Command {
     pub args: Vec<String>,
 }
 
-/// 解析文本命令；不是命令（没有前缀 / 前缀之后没有名字）返回 `None`。
-///
-/// 前缀可能多字符，且配置里允许同时存在长短两个（如 `/` 和 `//`），
-/// 所以取**最长匹配**：否则 `//bidilist` 会被解析成命令名 `/bidilist`。
-pub fn parse(text: &str, prefixes: &[String]) -> Option<Command> {
+/// 解析宿主归一化后的文本命令；不是 `/cmd` 返回 `None`。
+pub fn parse(text: &str) -> Option<Command> {
     let text = text.trim();
     if text.is_empty() || text.chars().count() > MAX_COMMAND_CHARS {
         return None;
     }
-    let prefix = prefixes
-        .iter()
-        .filter(|prefix| !prefix.is_empty() && text.starts_with(prefix.as_str()))
-        .max_by_key(|prefix| prefix.chars().count())?;
-    // strip_prefix 保证切在字符边界上（starts_with 已经确认过），比按字节下标切片安全。
-    let rest = text.strip_prefix(prefix.as_str())?.trim_start();
+    let rest = text.strip_prefix('/')?.trim_start();
     let mut tokens = tokenize(rest).into_iter();
     let raw = tokens.next()?;
     // `/bidihelp@fuyu_bot`：@ 之后是"喊哪个 bot"，不归本插件解释，截掉即可。
@@ -53,7 +45,7 @@ pub fn parse(text: &str, prefixes: &[String]) -> Option<Command> {
     })
 }
 
-/// 把"前缀之后的部分"切成 token。
+/// 把"命令头之后的部分"切成 token。
 ///
 /// 分隔符是空白；token 可以用成对引号包起来，这样 `/bidisay 42 "你好 世界"`
 /// 和 `/bidiword add 『加 微信』` 能带上空格。中英文四种引号都认——中文输入法下
@@ -119,42 +111,18 @@ fn closing_of(open: char) -> Option<char> {
 mod tests {
     use super::*;
 
-    fn prefixes() -> Vec<String> {
-        ["/", "!", "！", ".", "#"]
-            .iter()
-            .map(|prefix| (*prefix).to_owned())
-            .collect()
-    }
-
     #[test]
     fn parses_plain_command() {
-        let command = parse("/bidistatus", &prefixes()).expect("应当识别为命令");
+        let command = parse("/bidistatus").expect("应当识别为命令");
         assert_eq!(command.name, "bidistatus");
         assert!(command.args.is_empty());
     }
 
     #[test]
     fn lowercases_name_and_strips_bot_suffix() {
-        let command = parse("/BIDIHelp@Fuyu_Bot", &prefixes()).expect("应当识别为命令");
+        let command = parse("/BIDIHelp@Fuyu_Bot").expect("应当识别为命令");
         assert_eq!(command.name, "bidihelp");
         assert!(command.args.is_empty());
-    }
-
-    #[test]
-    fn longest_prefix_wins() {
-        let prefixes = vec!["/".to_owned(), "//".to_owned()];
-        let command = parse("//bidilist 7", &prefixes).expect("应当识别为命令");
-        assert_eq!(command.name, "bidilist");
-        assert_eq!(command.args, vec!["7".to_owned()]);
-    }
-
-    #[test]
-    fn supports_every_default_prefix() {
-        for prefix in ["/", "!", "！", ".", "#"] {
-            let text = format!("{prefix}bidihelp");
-            let command = parse(&text, &prefixes()).expect("默认前缀都要认");
-            assert_eq!(command.name, "bidihelp", "{text}");
-        }
     }
 
     #[test]
@@ -169,7 +137,7 @@ mod tests {
             ),
         ];
         for (text, expected) in cases {
-            let command = parse(text, &prefixes()).expect("应当识别为命令");
+            let command = parse(text).expect("应当识别为命令");
             assert_eq!(command.name, "bidisay", "{text}");
             assert_eq!(
                 command.args,
@@ -181,13 +149,13 @@ mod tests {
 
     #[test]
     fn unclosed_quote_is_tolerated() {
-        let command = parse("/bidisay 42 \"没关引号", &prefixes()).expect("应当识别为命令");
+        let command = parse("/bidisay 42 \"没关引号").expect("应当识别为命令");
         assert_eq!(command.args, vec!["42".to_owned(), "没关引号".to_owned()]);
     }
 
     #[test]
     fn quoted_command_name_is_accepted() {
-        let command = parse("/『bidilist』", &prefixes()).expect("应当识别为命令");
+        let command = parse("/『bidilist』").expect("应当识别为命令");
         assert_eq!(command.name, "bidilist");
     }
 
@@ -202,31 +170,22 @@ mod tests {
             "/   ",
             "/@fuyu_bot",
         ] {
-            assert!(
-                parse(text, &prefixes()).is_none(),
-                "{text:?} 不该被当成命令"
-            );
+            assert!(parse(text).is_none(), "{text:?} 不该被当成命令");
+        }
+        for text in ["!bidihelp", "！bidihelp", ".bidihelp", "#bidihelp"] {
+            assert!(parse(text).is_none(), "{text:?} 应等待宿主先归一化成 /cmd");
         }
     }
 
     #[test]
     fn rejects_overlong_text() {
         let text = format!("/bidihelp {}", "啊".repeat(MAX_COMMAND_CHARS));
-        assert!(parse(&text, &prefixes()).is_none());
-    }
-
-    #[test]
-    fn empty_prefixes_are_ignored() {
-        let prefixes = vec!["".to_owned(), "/".to_owned()];
-        let command = parse("/bidihelp", &prefixes).expect("非空前缀要生效");
-        assert_eq!(command.name, "bidihelp");
-        // 全是空前缀：没有任何东西能匹配，不能退化成"任意文本都是命令"。
-        assert!(parse("/bidihelp", &["".to_owned()]).is_none());
+        assert!(parse(&text).is_none());
     }
 
     #[test]
     fn extra_whitespace_between_prefix_and_name_is_ok() {
-        let command = parse("/  bidihelp", &prefixes()).expect("应当识别为命令");
+        let command = parse("/  bidihelp").expect("应当识别为命令");
         assert_eq!(command.name, "bidihelp");
     }
 }

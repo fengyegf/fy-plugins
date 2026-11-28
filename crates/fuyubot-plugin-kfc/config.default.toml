@@ -4,4 +4,3 @@
 api_url = "https://kfc-crazy-thursday.vercel.app/api/index"
 width = 800
 timeout_ms = 15000
-prefixes = ["/", "!", "！", ".", "#"]

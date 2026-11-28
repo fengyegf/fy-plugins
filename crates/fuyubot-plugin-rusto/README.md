@@ -54,7 +54,7 @@ plugins/fengyegf.rusto/
 | `/ocr path <本机路径>` | user · 私聊 / 群 | 识别本机图片，不经过 TDLib 下载（排障用） |
 | `/ocr help`（`-h`、`--help`、`帮助`） | user · 私聊 / 群 | 用法提示 |
 
-命令名前缀为 `/`、`!`、`！`、`.`、`#`，命令名是 `ocr`，也接受插件名 `rusto`；前缀硬编码在 `src/cmd/parser.rs`，**不读** `[plugin.fengyegf.rusto].prefixes` 或宿主 `[config].PREFIXES`。插件自身不做权限判断，`/ocr` 以 `role = user`、`scopes = private/group` 登记到宿主 `fuyubot.host.commands`（登记失败只影响 `/help` 一行）。未识别的子命令会退回普通 `/ocr`。
+命令头由宿主 `[command].prefix` 统一识别并归一化成 `/cmd`，插件只解析归一化后的 `/ocr`；命令名是 `ocr`，也接受插件名 `rusto`。插件自身不做权限判断，`/ocr` 以 `role = user`、`scopes = private/group` 登记到宿主 `fuyubot.host.commands`（登记失败只影响 `/help` 一行）。未识别的子命令会退回普通 `/ocr`。
 
 ## 配置一览
 

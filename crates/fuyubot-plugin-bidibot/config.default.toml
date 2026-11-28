@@ -25,4 +25,3 @@ notify_blocked_every_secs = 3600
 command_table = true
 ad_keywords = []
 ad_keywords_extra = []
-prefixes = ["/", "!", "！", ".", "#"]

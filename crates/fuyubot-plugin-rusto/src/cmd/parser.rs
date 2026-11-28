@@ -1,6 +1,7 @@
 //! /ocr 的参数解析。
 //!
-//! 接受的前缀与仓库其它插件一致（/、!、！、.、#），命令名是 ocr，也接受 rusto（插件名）。
+//! 宿主已按 `[command].prefix` 识别命令头，并统一归一化成 `/ocr`；命令名是 ocr，
+//! 也接受 rusto（插件名）。
 //!
 //! 用法：
 //! - /ocr              识别（回复图片 / 同条图片 / 私聊直接发图且 auto=true）
@@ -9,9 +10,6 @@
 //! - /ocr warm         预加载模型
 //! - /ocr path <路径>  识别本机图片（排障用）
 //! - /ocr help         用法
-
-/// 命令前缀。
-const PREFIXES: [char; 5] = ['/', '!', '！', '.', '#'];
 
 /// 命令别名（ocr 是主名，rusto 是插件名兜底）。
 const NAMES: [&str; 2] = ["ocr", "rusto"];
@@ -40,12 +38,7 @@ pub enum Command {
 /// 解析一条消息文本；不像本插件命令就返回 None。
 pub fn parse(text: &str) -> Option<Command> {
     let text = text.trim();
-    let mut chars = text.chars();
-    let first = chars.next()?;
-    if !PREFIXES.contains(&first) {
-        return None;
-    }
-    let rest = chars.as_str().trim_start();
+    let rest = text.strip_prefix('/')?.trim_start();
     let mut parts = rest.split_whitespace();
     let name = parts.next()?.to_lowercase();
     if !NAMES.contains(&name.as_str()) {
@@ -76,7 +69,6 @@ mod tests {
     #[test]
     fn plain_command_triggers_ocr() {
         assert_eq!(parse("/ocr"), Some(Command::Ocr { detail: false }));
-        assert_eq!(parse("！ocr"), Some(Command::Ocr { detail: false }));
     }
 
     #[test]
@@ -100,6 +92,7 @@ mod tests {
     fn other_commands_are_ignored() {
         assert_eq!(parse("/whois example.com"), None);
         assert_eq!(parse("hello"), None);
-        assert_eq!(parse("ocr"), None, "没有前缀不算命令");
+        assert_eq!(parse("！ocr"), None, "前缀已由宿主归一化");
+        assert_eq!(parse("ocr"), None, "没有 / 命令头不算命令");
     }
 }

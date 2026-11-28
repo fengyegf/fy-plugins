@@ -3,4 +3,3 @@
 background_url = "https://i0.hdslb.com/bfs/article/cc4a3e435ac47a6190aebf4f74a8675b88a183bb.jpg"
 timeout_ms = 5000
 avatar_timeout_ms = 20000
-prefixes = ["/", "!", "！", ".", "#"]

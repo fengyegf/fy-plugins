@@ -61,8 +61,7 @@ pub fn handle_user(ctx: &Arc<Ctx>, message: &IncomingMessage) -> bool {
     if !message.is_private || message.sender_user_id.is_none() {
         return false;
     }
-    let config = ctx.config();
-    let Some(command) = parser::parse(&message.text, &config.prefixes) else {
+    let Some(command) = parser::parse(&message.text) else {
         return false;
     };
     match command.name.as_str() {
@@ -89,7 +88,7 @@ pub fn handle_group(ctx: &Arc<Ctx>, message: &IncomingMessage, topic_user: Optio
     if message.is_private || config.group_id == 0 || message.chat_id != config.group_id {
         return false;
     }
-    let Some(command) = parser::parse(&message.text, &config.prefixes) else {
+    let Some(command) = parser::parse(&message.text) else {
         return false;
     };
     let manager = can_manage(&ctx.host(), &config, message.sender_user_id);

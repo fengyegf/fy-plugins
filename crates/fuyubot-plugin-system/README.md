@@ -28,7 +28,7 @@ crates/fuyubot-plugin-system/
    ├─ lib.rs                   # Plugin 实现、订阅 updateNewMessage、启停
    ├─ help.rs                  # 把 /system 登记进宿主命令表
    ├─ host/                    # worker.rs、messenger.rs、command.rs、mod.rs
-   ├─ cmd/                     # parser.rs（前缀 / @机器人）、system.rs（业务）
+   ├─ cmd/                     # parser.rs（归一化命令 / @机器人）、system.rs（业务）
    ├─ core/                    # config.rs、sysinfo.rs、td.rs、model.rs
    └─ render/                  # mod.rs、html2img.rs、avatar.rs、samples.rs
 ```
@@ -48,7 +48,7 @@ plugins/fengyegf.system/
 | --- | --- | --- |
 | `/system` | 无权限判断（登记 `role=user`），私聊 / 群聊 | 采集系统信息、TDLib 资料与插件清单，出卡片并回复照片 |
 
-命令名后的参数不会被读取；`/system@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀。命令前缀来自 `[plugin.fengyegf.system].prefixes`，未配置时跟随宿主 `[config].PREFIXES`。
+命令名后的参数不会被读取；`/system@机器人名` 这类群聊写法由解析器剥掉 `@` 后缀。命令头由宿主 `[command].prefix` 统一识别并归一化成 `/cmd`，插件不再读取自己的 `prefixes`。
 
 ## 配置一览
 
@@ -60,7 +60,6 @@ plugins/fengyegf.system/
 | `background_url` | 内置 B 站图 URL（见 `config.default.toml`） | 卡片背景公网 URL，由 html2img 拉取；写成空串则只用渐变 |
 | `timeout_ms` | `5000` | 单次 TDLib 调用超时（毫秒）；兼容旧写法 `timeout`（秒） |
 | `avatar_timeout_ms` | `20000` | 头像同步下载预算（毫秒）；兼容旧写法 `avatar_timeout`（秒） |
-| `prefixes` | `["/", "!", "！", ".", "#"]` | 命令前缀；不写则跟随宿主 `[config].PREFIXES` |
 
 兼容旧版大写键（`SUPER_ADMIN`、`BACKGROUND_URL`、`TIMEOUT_MS` 等）。
 
@@ -84,13 +83,13 @@ avatar_timeout_ms = 20000
 # super_admin = 123456789   # 可选：显式指定卡片上的管理员
 ```
 
-`background_url` 写成空串可关掉背景图（纯渐变）；不写 `background_url` 或 `prefixes` 时，分别使用内置背景图与宿主前缀。
+`background_url` 写成空串可关掉背景图（纯渐变）；不写 `background_url` 时使用内置背景图。
 
 **典型用法**
 
 ```text
 /system                  # 出系统信息卡片
-！system                 # 换一个前缀
+！system                 # 仅在 [command].prefix 配了 ! 时可用
 /system@fengyezzz_bot    # 群聊点名调用
 ```
 

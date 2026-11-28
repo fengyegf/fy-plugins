@@ -12,4 +12,4 @@ cover_height = 157
 caption = ""
 user_agent = "Mozilla/5.0 (compatible; fuyubot-epic/0.1)"
 
-# proxy 留空即直连，故不写；命令前缀跟随宿主 [config].PREFIXES。
+# proxy 留空即直连，故不写。

@@ -8,14 +8,10 @@
 //! api_url   = "https://kfc-crazy-thursday.vercel.app/api/index" # 文案来源
 //! width     = 800        # 卡片宽度（px），夹到 460–1600
 //! timeout_ms = 15000     # 拉文案的超时
-//! prefixes  = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
 //! ```
 //!
 //! 读取顺序：`start()` 传进来的配置 JSON（宿主可能已经把本插件段序列化好了）→
 //! `get_config("fengyegf.kfc", "")` 再读一次兜底；两者缺什么就各自退回缺省值。
-//!
-//! 命令前缀的第三层兜底是宿主顶层 `[config].PREFIXES`：那是 TS 宿主的写法，
-//! Rust 宿主没有这个键，读到 `None` 就继续用缺省值——所以别在这里假设它一定存在。
 
 use std::time::Duration;
 
@@ -27,9 +23,6 @@ pub const PLUGIN_NAME: &str = "fengyegf.kfc";
 
 /// 文案接口。TS 版里写死在 `index.ts`。
 pub const DEFAULT_API_URL: &str = "https://kfc-crazy-thursday.vercel.app/api/index";
-
-/// 命令前缀缺省值，与宿主 `[config].PREFIXES` 的缺省一致。
-const DEFAULT_PREFIXES: [&str; 5] = ["/", "!", "！", ".", "#"];
 
 /// 卡片宽度缺省值，与 TS 版 `generateImage({ width: 800 })` 一致。
 const DEFAULT_WIDTH: u32 = 800;
@@ -53,8 +46,6 @@ pub struct Config {
     pub width: u32,
     /// 拉文案的超时。
     pub timeout: Duration,
-    /// 命令前缀。
-    pub prefixes: Vec<String>,
 }
 
 impl Default for Config {
@@ -63,7 +54,6 @@ impl Default for Config {
             api_url: DEFAULT_API_URL.to_owned(),
             width: DEFAULT_WIDTH,
             timeout: DEFAULT_TIMEOUT,
-            prefixes: DEFAULT_PREFIXES.iter().map(|p| (*p).to_owned()).collect(),
         }
     }
 }
@@ -84,35 +74,11 @@ impl Config {
             config.apply(&value);
         }
 
-        // 前缀：插件段里写了就用插件的，否则跟随宿主顶层 [config].PREFIXES，
-        // 与 TS 版「沿用宿主命令前缀」的行为一致。
-        if config.prefixes.is_empty()
-            && let Some(value) = host
-                .config_value("", "config.PREFIXES")
-                .or_else(|| host.config_value("", "config.prefixes"))
-        {
-            let list: Vec<String> = value
-                .as_array()
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .filter(|prefix| !prefix.is_empty())
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default();
-            if !list.is_empty() {
-                config.prefixes = list;
-            }
-        }
-
         host.info(&format!(
-            "kfc: 配置 api={} 宽度={}px 超时={}s 前缀={:?}",
+            "kfc: 配置 api={} 宽度={}px 超时={}s",
             config.api_url,
             config.width,
             config.timeout.as_secs(),
-            config.prefixes
         ));
         config
     }
@@ -132,21 +98,6 @@ impl Config {
             self.timeout = Duration::from_millis(ms as u64);
         } else if let Some(seconds) = number(section, &["timeout", "TIMEOUT"]) {
             self.timeout = Duration::from_secs(seconds as u64);
-        }
-        if let Some(items) = section
-            .get("prefixes")
-            .or_else(|| section.get("PREFIXES"))
-            .and_then(Value::as_array)
-        {
-            let list: Vec<String> = items
-                .iter()
-                .filter_map(Value::as_str)
-                .filter(|prefix| !prefix.is_empty())
-                .map(str::to_owned)
-                .collect();
-            if !list.is_empty() {
-                self.prefixes = list;
-            }
         }
     }
 }
@@ -184,12 +135,10 @@ mod tests {
             "api_url": "https://example.com/kfc",
             "width": 900,
             "timeout_ms": 5000,
-            "prefixes": ["/", "kfc!"],
         }));
         assert_eq!(config.api_url, "https://example.com/kfc");
         assert_eq!(config.width, 900);
         assert_eq!(config.timeout, Duration::from_millis(5000));
-        assert_eq!(config.prefixes, vec!["/".to_owned(), "kfc!".to_owned()]);
     }
 
     #[test]
@@ -203,9 +152,8 @@ mod tests {
     #[test]
     fn ignores_bad_values() {
         let mut config = Config::default();
-        config.apply(&json!({ "api_url": "", "width": "abc", "prefixes": [] }));
+        config.apply(&json!({ "api_url": "", "width": "abc" }));
         assert_eq!(config.api_url, DEFAULT_API_URL);
         assert_eq!(config.width, DEFAULT_WIDTH);
-        assert_eq!(config.prefixes.len(), DEFAULT_PREFIXES.len());
     }
 }

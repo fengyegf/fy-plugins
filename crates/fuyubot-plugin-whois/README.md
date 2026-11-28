@@ -48,7 +48,7 @@ plugins/fengyegf.whois/
 | --- | --- | --- |
 | `/whois <域名>` | `user`，私聊 / 群聊 | 查询域名 Whois 与 IP 归属，渲染信息卡片并以照片回复 |
 
-命令前缀来自 `[plugin.fengyegf.whois].prefixes`；未配置时跟随宿主 `[config].PREFIXES`，最后回退到 `/ ! ！ . #`。
+命令头由宿主 `[command].prefix` 统一识别并归一化成 `/cmd`，插件不再读取自己的 `prefixes`。
 
 ## 配置一览
 
@@ -62,9 +62,7 @@ plugins/fengyegf.whois/
 | `timeout_ms` | `15000` | 单次查询超时（毫秒）；也接受 `timeout`（秒） |
 | `favicon` | `true` | 是否抓取网站图标，关掉后固定用内置图标 |
 | `favicon_timeout_ms` | `6000` | 抓图标的整体预算，夹到 `500`–`30000` 毫秒 |
-| `prefixes` | 跟随宿主 | 命令前缀列表；不写则用宿主 `[config].PREFIXES`，再回退 `/ ! ！ . #` |
 
-`config.default.toml` 只固化前六个字段的默认值；`prefixes` 故意留空，避免盖掉宿主全局前缀。
 
 ## 使用说明
 

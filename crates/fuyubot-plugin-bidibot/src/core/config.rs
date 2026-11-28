@@ -86,8 +86,6 @@ pub const DEFAULT_AD_KEYWORDS: &[&str] = &[
     "t.me/",
 ];
 
-const DEFAULT_PREFIXES: [&str; 5] = ["/", "!", "！", ".", "#"];
-
 /// Telegram 允许的话题图标颜色（createForumTopic 的 icon.color 只认这六个）。
 pub const TOPIC_COLORS: [i64; 6] = [0x6FB9F0, 0xFFD67E, 0xCB86DB, 0x8EEE98, 0xFF93B2, 0xFB6F5F];
 
@@ -135,7 +133,6 @@ pub struct Config {
     pub ad_keywords: Vec<String>,
     /// 追加到（内置或替换后的）关键词表。
     pub ad_keywords_extra: Vec<String>,
-    pub prefixes: Vec<String>,
 }
 
 impl Default for Config {
@@ -161,7 +158,6 @@ impl Default for Config {
             command_table: true,
             ad_keywords: Vec::new(),
             ad_keywords_extra: Vec::new(),
-            prefixes: DEFAULT_PREFIXES.iter().map(|p| (*p).to_owned()).collect(),
         }
     }
 }
@@ -177,15 +173,6 @@ impl Config {
         }
         if let Some(value) = host.config_value(PLUGIN_NAME, "") {
             config.apply(&value);
-        }
-        // 前缀跟宿主顶层 [config].PREFIXES 走（Rust 宿主没有这个键就继续用缺省）。
-        if config.prefixes.is_empty()
-            && let Some(value) = host
-                .config_value("", "config.PREFIXES")
-                .or_else(|| host.config_value("", "config.prefixes"))
-            && let Some(list) = string_list(&value)
-        {
-            config.prefixes = list;
         }
         config
     }
@@ -288,14 +275,6 @@ impl Config {
             .and_then(string_list)
         {
             self.ad_keywords_extra = list;
-        }
-        if let Some(list) = section
-            .get("prefixes")
-            .or_else(|| section.get("PREFIXES"))
-            .and_then(string_list)
-            && !list.is_empty()
-        {
-            self.prefixes = list;
         }
     }
 
@@ -414,7 +393,6 @@ mod tests {
         assert_eq!(config.owner_id, 0);
         assert_eq!(config.ad_mode, AdMode::Keyword);
         assert_eq!(config.auto_ban_after, 3);
-        assert_eq!(config.prefixes.first().map(String::as_str), Some("/"));
     }
 
     #[test]
@@ -433,7 +411,6 @@ mod tests {
             "store_path": "data/custom.json",
             "ad_keywords": ["spam", "广告"],
             "ad_keywords_extra": ["more"],
-            "prefixes": ["/", "!"],
         }));
         assert_eq!(config.owner_id, 123_456_789);
         assert_eq!(config.ad_mode, AdMode::Llm);
@@ -445,7 +422,6 @@ mod tests {
         assert!(!config.topic_card);
         assert_eq!(config.store_path, "data/custom.json");
         assert_eq!(config.effective_ad_keywords(), vec!["spam", "广告", "more"]);
-        assert_eq!(config.prefixes, vec!["/", "!"]);
     }
 
     #[test]

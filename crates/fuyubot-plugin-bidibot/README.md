@@ -24,7 +24,7 @@ crates/fuyubot-plugin-bidibot/
     lib.rs              入口、生命周期、html2img 软依赖探测
     help.rs             向宿主命令表登记 /bidi* 命令
     relay.rs            双向中转主链路（私聊 ⇄ 群话题）
-    cmd/                命令层：分派 mod / 管理命令 owner / 前缀解析 parser
+    cmd/                命令层：分派 mod / 管理命令 owner / 命令文本解析 parser
     core/               配置、本地库、广告判定、LLM、skills
     host/               消息网关与业务线程
     render/             名片数据与 fuyubot.html2img 客户端
@@ -58,7 +58,7 @@ plugins/fengyegf.bidibot/
 | `/bidisay [id] <文字>` | 主人 · 群 | 以 bot 身份主动给某用户发一条 |
 | `/bidicard` | 主人 · 群 | 在当前话题里重发该用户的名片 |
 
-命令前缀来自 `[plugin.fengyegf.bidibot].prefixes`（默认 `/`、`!`、`！`、`.`、`#`）；宿主顶层 `[config].PREFIXES` 仅在插件未给前缀时兜底。管理命令登记为 `role = "owner"`：谁能管理由**宿主全局角色**决定——`fuyubot.toml` 的 `[roles].owners`（user 账户 `owners` 为空时自己就是主人），插件段的 `owner_id` 只是额外再加一个人，新部署不需要重复配置。
+命令头由宿主 `[command].prefix` 统一识别并归一化成 `/cmd`，插件不再读取自己的 `prefixes`。管理命令登记为 `role = "owner"`：谁能管理由**宿主全局角色**决定——`fuyubot.toml` 的 `[roles].owners`（user 账户 `owners` 为空时自己就是主人），插件段的 `owner_id` 只是额外再加一个人，新部署不需要重复配置。
 
 ## 配置一览
 
@@ -90,7 +90,6 @@ plugins/fengyegf.bidibot/
 | `command_table` | `true` | 是否把 `/bidi*` 登记进宿主命令表（`/help` 数据源） |
 | `ad_keywords` | `[]` | 广告关键词表；非空 = 整体替换内置词表 |
 | `ad_keywords_extra` | `[]` | 追加到（内置或替换后的）词表 |
-| `prefixes` | `["/", "!", "！", ".", "#"]` | 命令前缀列表 |
 
 ## 使用说明
 
@@ -114,7 +113,7 @@ card_image = true            # 有 fuyubot.html2img 时渲染名片图
 
 **典型用法**：
 
-1. 用户直接私聊 bot，消息原样转进其专属话题；发命令前缀开头的消息不会被转发。
+1. 用户直接私聊 bot，消息原样转进其专属话题；发命令头开头的消息不会被转发。
 2. 主人在该话题里直接回复（文本或媒体）即回到用户；General 话题里没有对应关系，用 `/bidisay <id> <文字>`。
 3. `/bidilist` 查看黑名单，`/bidiban` 拉黑、`/bidiunban` 解封，`/bidiword` 维护广告词表。
 

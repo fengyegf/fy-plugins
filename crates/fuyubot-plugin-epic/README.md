@@ -48,7 +48,7 @@ plugins/fengyegf.epic/
 | `/epic` | `user`，私聊 / 群聊 | 查询当前免费与即将免费的游戏，出卡片图 |
 | `/epicfree` | `user`，私聊 / 群聊 | 与 `/epic` 完全等价的别名 |
 
-命令前缀只跟随宿主 `[config].PREFIXES`（缺省 `/ ! ！ . #`），本插件不读 `[plugin.fengyegf.epic].prefixes`。
+命令头由宿主 `[command].prefix` 统一识别并归一化成 `/cmd`，插件不再读取自己的 `prefixes`。
 
 ## 配置一览
 

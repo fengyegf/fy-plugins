@@ -46,7 +46,7 @@ plugins/fengyegf.kfc/
 | --- | --- | --- |
 | `/kfc` | `user`；私聊 + 群 | 抓一句文案，渲染卡片并以照片回复原消息；不接受参数，多写的参数会被忽略 |
 
-命令前缀来自 `[plugin.fengyegf.kfc].prefixes`，缺省为 `/`、`!`、`！`、`.`、`#`；命令名大小写不敏感，支持 `/kfc@机器人名` 写法。
+命令头由宿主 `[command].prefix` 统一识别并归一化成 `/cmd`，插件不再读取自己的 `prefixes`；命令名大小写不敏感，支持 `/kfc@机器人名` 写法。
 
 ## 配置一览
 
@@ -57,7 +57,6 @@ plugins/fengyegf.kfc/
 | `api_url` | `https://kfc-crazy-thursday.vercel.app/api/index` | 文案接口，只接受 `http(s)` 开头，响应体上限 256 KiB |
 | `width` | `800` | 卡片宽度（px），超出 460–1600 时夹到边界 |
 | `timeout_ms` | `15000` | 拉文案超时（毫秒）；也兼容 `timeout`（秒），同时存在时 `timeout_ms` 优先 |
-| `prefixes` | `["/", "!", "！", ".", "#"]` | 命令前缀列表，空数组或非法值回退默认 |
 
 `config.default.toml` 固化上表默认值，随发布包带入，按最低优先级并入 `[plugin.fengyegf.kfc]`，可被用户配置覆盖。
 
@@ -78,7 +77,7 @@ timeout_ms = 15000
 
 ```text
 /kfc
-！kfc@fuyu_bot
+！kfc@fuyu_bot           # 仅在 [command].prefix 配了 ! 时可用
 ```
 
 **构建与打包**：

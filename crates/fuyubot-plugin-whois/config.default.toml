@@ -5,5 +5,3 @@ width = 1200
 timeout_ms = 15000
 favicon = true
 favicon_timeout_ms = 6000
-
-# prefixes 故意不写死：未配置时自动跟随宿主 [config].PREFIXES，最后回退 / ! ！ . #

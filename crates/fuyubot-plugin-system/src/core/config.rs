@@ -7,7 +7,6 @@
 //! super_admin   = 123456789      # 可选：显式指定管理员；不写就用宿主 [roles].owners
 //! background_url = "https://…"   # 卡片背景图（公网 URL，由 html2img 拉取）；留空 = 纯渐变
 //! timeout_ms     = 5000          # 单次 TDLib 调用超时
-//! prefixes       = ["/", "!", "！", ".", "#"]  # 不写就用缺省前缀
 //! ```
 //!
 //! 读取顺序：`start()` 传进来的配置 JSON（宿主给的 `plugins_dir` 等）→
@@ -28,9 +27,6 @@ pub const PLUGIN_NAME: &str = "fengyegf.system";
 /// TS 版 `system.vue` 里写死的背景图；默认沿用它，作为公网 URL 直接写进 HTML。
 pub const DEFAULT_BACKGROUND_URL: &str =
     "https://i0.hdslb.com/bfs/article/cc4a3e435ac47a6190aebf4f74a8675b88a183bb.jpg";
-
-/// 命令前缀缺省值（与其它迁移插件一致）。
-const DEFAULT_PREFIXES: [&str; 5] = ["/", "!", "！", ".", "#"];
 
 /// 单次 TDLib 调用的缺省超时。
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -126,8 +122,6 @@ pub struct Config {
     pub td_timeout: Duration,
     /// 头像下载超时（同步 `downloadFile` 的等待预算）。
     pub avatar_timeout: Duration,
-    /// 命令前缀。
-    pub prefixes: Vec<String>,
 }
 
 impl Default for Config {
@@ -137,7 +131,6 @@ impl Default for Config {
             background_url: Some(DEFAULT_BACKGROUND_URL.to_owned()),
             td_timeout: DEFAULT_TIMEOUT,
             avatar_timeout: DEFAULT_AVATAR_TIMEOUT,
-            prefixes: DEFAULT_PREFIXES.iter().map(|p| (*p).to_owned()).collect(),
         }
     }
 }
@@ -163,35 +156,12 @@ impl Config {
             config.super_admin = host_owner(host);
         }
 
-        // 前缀：插件段里没写就跟随宿主顶层 `[config].PREFIXES`。
-        if config.prefixes.is_empty()
-            && let Some(value) = host
-                .config_value("", "config.PREFIXES")
-                .or_else(|| host.config_value("", "config.prefixes"))
-        {
-            let list: Vec<String> = value
-                .as_array()
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .filter(|prefix| !prefix.is_empty())
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default();
-            if !list.is_empty() {
-                config.prefixes = list;
-            }
-        }
-
         host.info(&format!(
-            "system: 配置 super_admin={:?} 背景={} 超时={}ms 头像超时={}ms 前缀={:?}",
+            "system: 配置 super_admin={:?} 背景={} 超时={}ms 头像超时={}ms",
             config.super_admin,
             config.background_url.as_deref().unwrap_or("（无）"),
             config.td_timeout.as_millis(),
             config.avatar_timeout.as_millis(),
-            config.prefixes
         ));
         config
     }
@@ -218,21 +188,6 @@ impl Config {
             self.avatar_timeout = Duration::from_millis(ms as u64);
         } else if let Some(seconds) = number(section, &["avatar_timeout", "AVATAR_TIMEOUT"]) {
             self.avatar_timeout = Duration::from_secs(seconds as u64);
-        }
-        if let Some(items) = section
-            .get("prefixes")
-            .or_else(|| section.get("PREFIXES"))
-            .and_then(Value::as_array)
-        {
-            let list: Vec<String> = items
-                .iter()
-                .filter_map(Value::as_str)
-                .filter(|prefix| !prefix.is_empty())
-                .map(str::to_owned)
-                .collect();
-            if !list.is_empty() {
-                self.prefixes = list;
-            }
         }
     }
 }

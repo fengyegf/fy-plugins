@@ -49,7 +49,7 @@ plugins/fengyegf.musiccard/
 | --- | --- | --- |
 | `/musiccard <歌曲ID / 链接 / 关键词>` | `user`；私聊 + 群 | 取歌、选歌词、渲染 650×1220 音乐卡片并以照片回复；无参数时回用法提示 |
 
-命令前缀来自宿主顶层 `[config].PREFIXES`，缺省为 `/`、`!`、`！`、`.`、`#`；`[plugin.fengyegf.musiccard]` 没有 `prefixes` 键。命令名大小写不敏感，支持 `/musiccard@机器人名`，关键词可按空格分隔。
+命令头由宿主 `[command].prefix` 统一识别并归一化成 `/cmd`，插件不再读取自己的 `prefixes`。命令名大小写不敏感，支持 `/musiccard@机器人名`，关键词可按空格分隔。
 
 ## 配置一览
 
@@ -59,7 +59,7 @@ plugins/fengyegf.musiccard/
 | --- | --- | --- |
 | `request_timeout_ms` | `15000` | 普通接口超时（毫秒，最小 1）；当前取数层固定用 15s，该字段读取后只写入启动日志，修改它暂不改变实际请求 |
 
-`config.default.toml` 固化上表默认值，随发布包带入，按最低优先级并入 `[plugin.fengyegf.musiccard]`，可被用户配置覆盖。命令前缀不属于插件段，读宿主 `[config].PREFIXES`；老配置里残留的 `temp_dir` 会被安静忽略。
+`config.default.toml` 固化上表默认值，随发布包带入，按最低优先级并入 `[plugin.fengyegf.musiccard]`，可被用户配置覆盖。命令头不属于插件段，由宿主 `[command].prefix` 统一处理；老配置里残留的 `temp_dir` 会被安静忽略。
 
 ## 使用说明
 
@@ -71,8 +71,8 @@ plugins/fengyegf.musiccard/
 [plugin.fengyegf.musiccard]
 request_timeout_ms = 15000
 
-[config]
-PREFIXES = ["/", "!", "！", ".", "#"]
+[command]
+prefix = ["/"]
 ```
 
 **典型用法**：
